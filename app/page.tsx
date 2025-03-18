@@ -1,27 +1,39 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
-import { storage, signInAnonymousUser } from "../utils/firebase";
+import { ref, uploadBytesResumable, getDownloadURL, listAll, getStorage } from "firebase/storage";
+import { signInAnonymousUser } from "../utils/firebase";
 import { MdClose } from "react-icons/md";
+import { useRouter, useSearchParams } from "next/navigation";
 
-interface Post {
-  text: string;
-  imageUrl: string;
-  createdAt: Date;
-}
 
-export default function Home() {
+  const storage = getStorage()
+
+  interface PageProps {
+    params: {
+      id: string;
+    };
+  }
+
+export default function Home({ params } : PageProps) {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [otherFile, setOtherFile] = useState<File | null>(null);
   const [text, setText] = useState("");
   const [audioFile, setAudioFile] = useState<File | null>(null);
-  const [audioProgress, setAudioProgress] = useState(0);
   const [progress, setProgress] = useState(0);
   const [downloadURL, setDownloadURL] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [fileUrl, setFileUrl] = useState("");
+
+
+  const router = useRouter();
+  const ritualIdStr = params.id as string
+  console.log("ritual str:",ritualIdStr)
+  const ritualId = parseInt(ritualIdStr, 10) || 5;
+  console.log("ritual id:", ritualId)
+
 
   useEffect(() => {
     signInAnonymousUser().catch(() => {
@@ -43,7 +55,7 @@ export default function Home() {
     if (e.target.files && e.target.files[0]) {
       const selectedFile = e.target.files[0];
 
-      // Check if the selected file is an image
+      
       if (selectedFile.type.startsWith("image/")) {
         setImageFile(selectedFile);
         const preview = URL.createObjectURL(selectedFile);
@@ -74,6 +86,9 @@ export default function Home() {
     }
   };
 
+
+  // upload_--------------------------------------------------------------------------
+
   const handleUpload = async () => {
     if (!imageFile && !otherFile && !audioFile) {
       setError("Please select a file first");
@@ -89,7 +104,10 @@ export default function Home() {
       let fileToUpload = imageFile || otherFile || audioFile;
       if (!fileToUpload) return;
 
-      const storageRef = ref(storage, `uploads/${Date.now()}_${fileToUpload.name}`);
+      const storagePath =`demo/${ritualId}`;
+      console.log("storage path",storagePath)
+      const storageRef = ref(storage, storagePath);
+      console.log("storage ref:",storageRef)
       const uploadTask = uploadBytesResumable(storageRef, fileToUpload);
 
       uploadTask.on(
@@ -117,12 +135,25 @@ export default function Home() {
     }
   };
 
+
+  //----- Fetch all files ------------------------------------------
+
+      const listRef = ref(storage, 'demo');
+    listAll(listRef)
+      .then((res: any) => {
+      console.log("str:", res)
+      }).catch((error) => {
+        console.log('error occured',error)
+      });
+
+ // -------------------------------------
   return (
     <div className="min-h-screen bg-gray-100 py-8 px-4">
       <div className="max-w-md mx-auto bg-white rounded-lg shadow-md p-6">
         <h1 className="text-2xl font-bold text-gray-800 mb-6 text-center">File Upload</h1>
 
         <div className="space-y-6">
+
           {/* Text Input */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Enter Text</label>
@@ -133,6 +164,7 @@ export default function Home() {
               placeholder="Enter your text here..."
             />
           </div>
+
 
           {/* Image Upload Section */}
           <div className="flex flex-col items-center justify-center w-full p-4 border-2 border-dotted border-gray-400 rounded-lg">
@@ -162,7 +194,7 @@ export default function Home() {
             ) : (
               <div className="flex flex-col items-center">
                 <img
-                  src="/add-image.png" // Replace with actual upload icon path
+                  src="/add-image.png" 
                   alt="Upload Placeholder"
                   className="w-16 h-16 opacity-50"
                   onClick={() => document.getElementById("image-input")?.click()}
