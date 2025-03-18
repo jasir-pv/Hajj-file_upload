@@ -5,6 +5,7 @@ import { ref, uploadBytesResumable, getDownloadURL, listAll, getStorage } from "
 import { signInAnonymousUser } from "../utils/firebase";
 import { MdClose } from "react-icons/md";
 import { useRouter, useSearchParams } from "next/navigation";
+import Image from "next/image";
 
 
   const storage = getStorage()
@@ -21,7 +22,7 @@ export default function Home({ params } : PageProps) {
   const [text, setText] = useState("");
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [progress, setProgress] = useState(0);
-  const [downloadURL, setDownloadURL] = useState("");
+  // const [downloadURL, setDownloadURL] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -101,7 +102,7 @@ export default function Home({ params } : PageProps) {
     }
 
     try {
-      let fileToUpload = imageFile || otherFile || audioFile;
+      const fileToUpload = imageFile || otherFile || audioFile;
       if (!fileToUpload) return;
 
       const storagePath =`demo/${ritualId}`;
@@ -122,7 +123,7 @@ export default function Home({ params } : PageProps) {
         },
         () => {
           getDownloadURL(uploadTask.snapshot.ref).then((url) => {
-            setDownloadURL(url);
+            // setDownloadURL(url);
             console.log("Upload successful! File available at:", url);
             alert("Upload successful!");
             setError("");
@@ -170,7 +171,7 @@ export default function Home({ params } : PageProps) {
           <div className="flex flex-col items-center justify-center w-full p-4 border-2 border-dotted border-gray-400 rounded-lg">
             {previewUrl ? (
               <div className="relative">
-                <img
+                <Image
                   src={previewUrl}
                   alt="Selected file preview"
                   className="object-cover w-32 h-32 rounded-lg"
@@ -182,7 +183,7 @@ export default function Home({ params } : PageProps) {
                     e.stopPropagation();
                     setImageFile(null);
                     setPreviewUrl(null);
-                    setDownloadURL("");
+                    // setDownloadURL("");
                     setError("");
                     if (previewUrl) URL.revokeObjectURL(previewUrl);
                   }}
@@ -193,7 +194,7 @@ export default function Home({ params } : PageProps) {
               </div>
             ) : (
               <div className="flex flex-col items-center">
-                <img
+                <Image
                   src="/add-image.png" 
                   alt="Upload Placeholder"
                   className="w-16 h-16 opacity-50"
