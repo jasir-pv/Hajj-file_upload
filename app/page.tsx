@@ -22,11 +22,11 @@ export default function Home({ params } : PageProps) {
   const [text, setText] = useState("");
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [progress, setProgress] = useState(0);
-  // const [downloadURL, setDownloadURL] = useState("");
+  const [_downloadURL, _setDownloadURL] = useState("");
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [loading, _setLoading] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [fileUrl, setFileUrl] = useState("");
+  const [_audioProgress, _setAudioProgress] = useState(0);
 
 
   const router = useRouter();
@@ -197,6 +197,8 @@ export default function Home({ params } : PageProps) {
                 <Image
                   src="/add-image.png" 
                   alt="Upload Placeholder"
+                  width={64} // Set width
+                  height={64}
                   className="w-16 h-16 opacity-50"
                   onClick={() => document.getElementById("image-input")?.click()}
                 />
