@@ -1,40 +1,28 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { ref, uploadBytesResumable, getDownloadURL, listAll, getStorage } from "firebase/storage";
+import { ref, uploadBytesResumable, getDownloadURL, getStorage } from "firebase/storage";
 import { signInAnonymousUser } from "../utils/firebase";
 import { MdClose } from "react-icons/md";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useParams } from "next/navigation";
 import Image from "next/image";
 
+const storage = getStorage()
 
-  const storage = getStorage()
 
-  interface PageProps {
-    params: {
-      id: string;
-    };
-  }
 
-export default function Home({ params } : PageProps) {
+export default function Home() {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [otherFile, setOtherFile] = useState<File | null>(null);
   const [text, setText] = useState("");
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [progress, setProgress] = useState(0);
-  const [_downloadURL, _setDownloadURL] = useState("");
   const [error, setError] = useState("");
-  const [loading, _setLoading] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [_audioProgress, _setAudioProgress] = useState(0);
 
-
-  const router = useRouter();
-  const ritualIdStr = params.id as string
-  console.log("ritual str:",ritualIdStr)
+  const params = useParams()
+  const ritualIdStr = params.id as string;
   const ritualId = parseInt(ritualIdStr, 10) || 5;
-  console.log("ritual id:", ritualId)
-
 
   useEffect(() => {
     signInAnonymousUser().catch(() => {
@@ -50,13 +38,11 @@ export default function Home({ params } : PageProps) {
     };
   }, [previewUrl]);
 
-  // Handle Image Upload
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setError("");
     if (e.target.files && e.target.files[0]) {
       const selectedFile = e.target.files[0];
 
-      
       if (selectedFile.type.startsWith("image/")) {
         setImageFile(selectedFile);
         const preview = URL.createObjectURL(selectedFile);
@@ -67,7 +53,6 @@ export default function Home({ params } : PageProps) {
     }
   };
 
-  // Handle Other File Upload (PDFs, Docs, etc.)
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setError("");
     if (e.target.files && e.target.files[0]) {
@@ -87,9 +72,6 @@ export default function Home({ params } : PageProps) {
     }
   };
 
-
-  // upload_--------------------------------------------------------------------------
-
   const handleUpload = async () => {
     if (!imageFile && !otherFile && !audioFile) {
       setError("Please select a file first");
@@ -105,10 +87,8 @@ export default function Home({ params } : PageProps) {
       const fileToUpload = imageFile || otherFile || audioFile;
       if (!fileToUpload) return;
 
-      const storagePath =`demo/${ritualId}`;
-      console.log("storage path",storagePath)
+      const storagePath = `demo/${ritualId}`;
       const storageRef = ref(storage, storagePath);
-      console.log("storage ref:",storageRef)
       const uploadTask = uploadBytesResumable(storageRef, fileToUpload);
 
       uploadTask.on(
@@ -122,9 +102,7 @@ export default function Home({ params } : PageProps) {
           setProgress(0);
         },
         () => {
-          getDownloadURL(uploadTask.snapshot.ref).then((url) => {
-            // setDownloadURL(url);
-            console.log("Upload successful! File available at:", url);
+          getDownloadURL(uploadTask.snapshot.ref).then(() => {
             alert("Upload successful!");
             setError("");
           });
@@ -136,26 +114,12 @@ export default function Home({ params } : PageProps) {
     }
   };
 
-
-  //----- Fetch all files ------------------------------------------
-
-      const listRef = ref(storage, 'demo');
-    listAll(listRef)
-      .then((res: any) => {
-      console.log("str:", res)
-      }).catch((error) => {
-        console.log('error occured',error)
-      });
-
- // -------------------------------------
   return (
     <div className="min-h-screen bg-gray-100 py-8 px-4">
       <div className="max-w-md mx-auto bg-white rounded-lg shadow-md p-6">
         <h1 className="text-2xl font-bold text-gray-800 mb-6 text-center">File Upload</h1>
 
         <div className="space-y-6">
-
-          {/* Text Input */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Enter Text</label>
             <textarea
@@ -166,14 +130,14 @@ export default function Home({ params } : PageProps) {
             />
           </div>
 
-
-          {/* Image Upload Section */}
           <div className="flex flex-col items-center justify-center w-full p-4 border-2 border-dotted border-gray-400 rounded-lg">
             {previewUrl ? (
               <div className="relative">
                 <Image
                   src={previewUrl}
                   alt="Selected file preview"
+                  width={128}
+                  height={128}
                   className="object-cover w-32 h-32 rounded-lg"
                   onClick={() => document.getElementById("image-input")?.click()}
                 />
@@ -183,7 +147,6 @@ export default function Home({ params } : PageProps) {
                     e.stopPropagation();
                     setImageFile(null);
                     setPreviewUrl(null);
-                    // setDownloadURL("");
                     setError("");
                     if (previewUrl) URL.revokeObjectURL(previewUrl);
                   }}
@@ -195,9 +158,9 @@ export default function Home({ params } : PageProps) {
             ) : (
               <div className="flex flex-col items-center">
                 <Image
-                  src="/add-image.png" 
+                  src="/add-image.png"
                   alt="Upload Placeholder"
-                  width={64} // Set width
+                  width={64}
                   height={64}
                   className="w-16 h-16 opacity-50"
                   onClick={() => document.getElementById("image-input")?.click()}
@@ -214,7 +177,6 @@ export default function Home({ params } : PageProps) {
             />
           </div>
 
-          {/* File Upload Section (Other Files like PDFs, DOCs) */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Choose File</label>
             <input
@@ -226,21 +188,22 @@ export default function Home({ params } : PageProps) {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Upload Audio</label>
-            <input type="file" accept="audio/*" onChange={handleAudioChange} className="text-gray-500 text-sm"/>
+            <input
+              type="file"
+              accept="audio/*"
+              onChange={handleAudioChange}
+              className="text-gray-500 text-sm"
+            />
           </div>
 
-
-
-          {/* Upload Button */}
           <button
             onClick={handleUpload}
-            disabled={(!imageFile && !otherFile) || !text || loading}
+            disabled={(!imageFile && !otherFile && !audioFile) || !text}
             className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
           >
-            {loading ? "Uploading..." : "Upload Content"}
+            Upload Content
           </button>
 
-          {/* Upload Progress */}
           {progress > 0 && (
             <div className="pt-4">
               <div className="flex justify-between mb-1">
@@ -256,7 +219,6 @@ export default function Home({ params } : PageProps) {
             </div>
           )}
 
-          {/* Error Messages */}
           {error && (
             <div className="p-4 text-sm text-red-700 bg-red-100 rounded-lg" role="alert">
               {error}
