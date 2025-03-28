@@ -3,8 +3,10 @@
 import React, { useState, useEffect } from 'react';
 import { MdClose } from 'react-icons/md';
 import { ref, uploadBytesResumable, getDownloadURL, getStorage } from "firebase/storage";
+import { signInAnonymousUser } from "../utils/firebase";
 import Image from 'next/image';
-import { title } from 'process';
+
+const storage = getStorage()
 
 type UpdateItem = {
   id: string;
@@ -14,10 +16,6 @@ type UpdateItem = {
   imageUrl?: string;
 };
 
-
-
-const storage = getStorage()
-
 const LiveUpdates = () => {
   const [updates, setUpdates] = useState<UpdateItem[]>([
     {
@@ -25,7 +23,7 @@ const LiveUpdates = () => {
       title: "Hajj 2024 Registration Opens",
       date: "May 15, 2024",
       description: "The Ministry of Hajj and Umrah has announced the opening of registration for Hajj 2024.",
-      imageUrl: "/live-update.jpg" // Sample image URL
+      imageUrl: "/live-update.jpg"
     }
   ]);
   const [newUpdate, setNewUpdate] = useState({
@@ -38,6 +36,12 @@ const LiveUpdates = () => {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
+
+  useEffect(() => {
+    signInAnonymousUser().catch(() => {
+      setError("Authentication failed. Uploads may not work properly.");
+    });
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -63,11 +67,11 @@ const LiveUpdates = () => {
   };
 
   const uploadImage = async (): Promise<string | null> => {
-    if (!imageFile) return null;
+    if (!imageFile || !newUpdate.title) return null;
 
     try {
       setIsUploading(true);
-      const storagePath = `updates/${title}`;
+      const storagePath = `updates/${Date.now()}_${imageFile.name}`;
       const storageRef = ref(storage, storagePath);
       
       return new Promise((resolve, reject) => {
@@ -182,53 +186,53 @@ const LiveUpdates = () => {
             />
           </div>
 
-          {/* Image Upload Section */}
-           <div className="flex flex-col items-center justify-center w-full p-4 border-2 border-dotted border-gray-400 rounded-lg">
-                  {previewUrl ? (
-                    <div className="relative">
-                      <Image
-                        src={previewUrl}
-                        alt="Selected file preview"
-                        width={128}
-                        height={128}
-                        className="object-cover w-32 h-32 rounded-lg"
-                        onClick={() => document.getElementById("image-input")?.click()}
-                      />
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setImageFile(null);
-                          setPreviewUrl(null);
-                          setError("");
-                          if (previewUrl) URL.revokeObjectURL(previewUrl);
-                        }}
-                        className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1.5 hover:bg-red-600 transition-colors"
-                      >
-                        <MdClose />
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="flex flex-col items-center">
-                      <Image
-                        src="/add-image.png"
-                        alt="Upload Placeholder"
-                        width={64}
-                        height={64}
-                        className="w-16 h-16 opacity-50"
-                        onClick={() => document.getElementById("image-input")?.click()}
-                      />
-                      <p className="text-gray-500 text-sm mt-2">Upload Image</p>
-                    </div>
-                  )}
-                  <input
-                    id="image-input"
-                    type="file"
-                    onChange={handleImageChange}
-                    accept="image/*"
-                    className="hidden"
-                  />
-                </div>
+          {/* Image Upload Section - Updated to match FileUpload */}
+          <div className="flex flex-col items-center justify-center w-full p-4 border-2 border-dotted border-gray-400 rounded-lg">
+            {previewUrl ? (
+              <div className="relative">
+                <Image
+                  src={previewUrl}
+                  alt="Selected file preview"
+                  width={128}
+                  height={128}
+                  className="object-cover w-32 h-32 rounded-lg"
+                  onClick={() => document.getElementById("image-input")?.click()}
+                />
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setImageFile(null);
+                    setPreviewUrl(null);
+                    setError("");
+                    if (previewUrl) URL.revokeObjectURL(previewUrl);
+                  }}
+                  className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1.5 hover:bg-red-600 transition-colors"
+                >
+                  <MdClose />
+                </button>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center">
+                <Image
+                  src="/add-image.png"
+                  alt="Upload Placeholder"
+                  width={64}
+                  height={64}
+                  className="w-16 h-16 opacity-50"
+                  onClick={() => document.getElementById("image-input")?.click()}
+                />
+                <p className="text-gray-500 text-sm mt-2">Upload Image</p>
+              </div>
+            )}
+            <input
+              id="image-input"
+              type="file"
+              onChange={handleImageChange}
+              accept="image/*"
+              className="hidden"
+            />
+          </div>
 
           {uploadProgress > 0 && (
             <div className="pt-2">
@@ -274,9 +278,11 @@ const LiveUpdates = () => {
                   <div className="w-full">
                     {update.imageUrl && (
                       <div className="mb-3">
-                        <img
+                        <Image
                           src={update.imageUrl}
                           alt={update.title}
+                          width={500}
+                          height={300}
                           className="w-full h-48 object-cover rounded-lg"
                         />
                       </div>
@@ -298,8 +304,6 @@ const LiveUpdates = () => {
           </div>
         )}
       </div>
-
-    
     </div>
   );
 };
