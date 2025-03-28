@@ -4,7 +4,7 @@ import { useState } from "react";
 import LiveUpdates from "@/container/LiveUpdates";
 import FileUpload from "@/container/FileUpload";
 import UpcomingEvents from "@/container/UpcomingEvents";
-import TravelAdvisery from "@/container/TravelAdvisery";
+import TravelAdviseries from "@/container/TravelAdviseries";
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<string>("file-upload");
@@ -55,7 +55,7 @@ export default function Home() {
                 : "bg-gray-200 text-gray-700"
             }`}
           >
-            Travel Advisory
+            Travel Advisories
           </button>
         </div>
 
@@ -64,7 +64,7 @@ export default function Home() {
           {activeTab === "file-upload" && <FileUpload />}
           {activeTab === "live-updates" && <LiveUpdates />}
           {activeTab === "upcoming-events" && <UpcomingEvents />}
-          {activeTab === "travel-advisory" && <TravelAdvisery />}
+          {activeTab === "travel-advisory" && <TravelAdviseries />}
         </div>
       </div>
     </div>
