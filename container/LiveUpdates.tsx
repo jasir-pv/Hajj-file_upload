@@ -14,19 +14,18 @@ type UpdateItem = {
   imageUrl?: string;
 };
 
-type Props = {};
+
 
 const storage = getStorage()
 
-const LiveUpdates = (props: Props) => {
-  const [text, setText] = useState("");
+const LiveUpdates = () => {
   const [updates, setUpdates] = useState<UpdateItem[]>([
     {
       id: "1",
       title: "Hajj 2024 Registration Opens",
       date: "May 15, 2024",
       description: "The Ministry of Hajj and Umrah has announced the opening of registration for Hajj 2024.",
-      imageUrl: "https://example.com/hajj-registration.jpg" // Sample image URL
+      imageUrl: "/live-update.jpg" // Sample image URL
     }
   ]);
   const [newUpdate, setNewUpdate] = useState({
