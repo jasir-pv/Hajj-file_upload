@@ -28,7 +28,7 @@ export default function Home() {
 
           <button
             onClick={() => setActiveTab("live-updates")}
-            className={`px-2 py-1 rounded-md text-sm ${
+            className={`px-2 py-1 rounded-md text-xs ${
               activeTab === "live-updates"
                 ? "bg-blue-600 text-white"
                 : "bg-gray-200 text-gray-700"
@@ -39,7 +39,7 @@ export default function Home() {
 
           <button
             onClick={() => setActiveTab("upcoming-events")}
-            className={`px-2 py-1 rounded-md text-sm ${
+            className={`px-2 py-1 rounded-md text-xs ${
               activeTab === "upcoming-events"
                 ? "bg-blue-600 text-white"
                 : "bg-gray-200 text-gray-700"
@@ -49,7 +49,7 @@ export default function Home() {
           </button>
           <button
             onClick={() => setActiveTab("travel-advisory")}
-            className={`px-2 py-1 rounded-md text-sm ${
+            className={`px-2 py-1 rounded-md text-xs ${
               activeTab === "travel-advisory"
                 ? "bg-blue-600 text-white"
                 : "bg-gray-200 text-gray-700"
