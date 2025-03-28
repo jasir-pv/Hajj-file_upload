@@ -3,7 +3,6 @@
 import React, { useState, useEffect } from 'react';
 import { MdClose } from 'react-icons/md';
 import { ref, uploadBytesResumable, getDownloadURL, getStorage } from "firebase/storage";
-import { storage } from "@/utils/firebase"; // Make sure to import your Firebase storage
 import Image from 'next/image';
 import { title } from 'process';
 
