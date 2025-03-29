@@ -111,7 +111,7 @@ const TravelAdvisories = () => {
 
       <div className="space-y-4">
         {advisories.map((advisory) => (
-          <div key={advisory.id} className="border-b pb-4 last:border-b-0">
+          <div key={advisory.id} className="border-b border-gray-300 pb-4 last:border-b-0">
             <div className="flex justify-between items-start">
               <div>
                 <h3 className="font-bold text-gray-800">{advisory.title}</h3>
