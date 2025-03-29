@@ -11,6 +11,7 @@ const storage = getStorage()
 
 const FileUpload = () => {
 
+    const [title, setTitle] = useState("");
     const [imageFiles, setImageFiles] = useState<File[]>([]);
     const [otherFiles, setOtherFiles] = useState<File[]>([]);
     const [text, setText] = useState("");
@@ -203,6 +204,16 @@ const FileUpload = () => {
     <h1 className="text-2xl font-bold text-gray-800 mb-6 text-center">File Upload</h1>
   
     <div className="space-y-6">
+    <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
+          <input
+            type="text"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            className="w-full p-2 border rounded text-gray-700 text-sm"
+            placeholder="Enter a title"
+          />
+        </div>
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-2">Enter Text</label>
         <textarea
