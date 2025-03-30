@@ -2,23 +2,44 @@
   
 import { useState, useEffect } from "react";
 import { ref, uploadBytesResumable, getDownloadURL, getStorage, listAll } from "firebase/storage";
+import { getFirestore, doc, setDoc, collection } from "firebase/firestore";
 import { signInAnonymousUser } from "../utils/firebase";
-import { MdClose } from "react-icons/md";
+import { MdClose, MdImage, MdAdd, MdDelete } from "react-icons/md";
 import Image from "next/image";
 
-
 const storage = getStorage()
+const firestore = getFirestore()
+
+// Define interfaces for our data structure
+interface ParagraphItem {
+  title: string;
+  description: string[];
+}
+
+interface ContentData {
+  name: string;
+  description: string[];
+  paragraphs: ParagraphItem[];
+  content_image?: string;
+}
 
 const FileUpload = () => {
-
-    const [title, setTitle] = useState("");
     const [imageFiles, setImageFiles] = useState<File[]>([]);
+    const [contentImageFile, setContentImageFile] = useState<File | null>(null);
     const [otherFiles, setOtherFiles] = useState<File[]>([]);
-    const [text, setText] = useState("");
+    
+    // Updated state for structured content
+    const [name, setName] = useState("");
+    const [description, setDescription] = useState<string[]>([""]);
+    const [paragraphs, setParagraphs] = useState<ParagraphItem[]>([
+      { title: "", description: [""] }
+    ]);
+    
     const [audioFiles, setAudioFiles] = useState<File[]>([]);
     const [progress, setProgress] = useState(0);
     const [error, setError] = useState("");
     const [previewUrls, setPreviewUrls] = useState<string[]>([]);
+    const [contentImagePreview, setContentImagePreview] = useState<string | null>(null);
     const [nextFolderId, setNextFolderId] = useState<number | null>(null);
   
     useEffect(() => {
@@ -57,6 +78,14 @@ const FileUpload = () => {
       
       fetchHighestFolderId();
     }, []);
+  
+    useEffect(() => {
+      return () => {
+        if (contentImagePreview) {
+          URL.revokeObjectURL(contentImagePreview);
+        }
+      };
+    }, [contentImagePreview]);
   
     const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
       setError("");
@@ -117,9 +146,91 @@ const FileUpload = () => {
       setPreviewUrls(newPreviewUrls);
     };
   
+    const handleContentImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      setError("");
+      if (e.target.files && e.target.files[0]) {
+        const file = e.target.files[0];
+        
+        if (file.type.startsWith("image/")) {
+          // Revoke previous preview URL if it exists
+          if (contentImagePreview) {
+            URL.revokeObjectURL(contentImagePreview);
+          }
+          
+          setContentImageFile(file);
+          const preview = URL.createObjectURL(file);
+          setContentImagePreview(preview);
+        } else {
+          setError("Please select a valid image file for content image.");
+        }
+      }
+    };
+    
+    const removeContentImage = () => {
+      if (contentImagePreview) {
+        URL.revokeObjectURL(contentImagePreview);
+      }
+      setContentImageFile(null);
+      setContentImagePreview(null);
+    };
+  
+    // Description array handlers
+    const handleDescriptionChange = (index: number, value: string) => {
+      const newDescription = [...description];
+      newDescription[index] = value;
+      setDescription(newDescription);
+    };
+    
+    const addDescriptionField = () => {
+      setDescription([...description, ""]);
+    };
+    
+    const removeDescriptionField = (index: number) => {
+      const newDescription = [...description];
+      newDescription.splice(index, 1);
+      setDescription(newDescription);
+    };
+    
+    // Paragraph handlers
+    const handleParagraphTitleChange = (index: number, value: string) => {
+      const newParagraphs = [...paragraphs];
+      newParagraphs[index].title = value;
+      setParagraphs(newParagraphs);
+    };
+    
+    const handleParagraphDescriptionChange = (paraIndex: number, descIndex: number, value: string) => {
+      const newParagraphs = [...paragraphs];
+      newParagraphs[paraIndex].description[descIndex] = value;
+      setParagraphs(newParagraphs);
+    };
+    
+    const addParagraph = () => {
+      setParagraphs([...paragraphs, { title: "", description: [""] }]);
+    };
+    
+    const removeParagraph = (index: number) => {
+      const newParagraphs = [...paragraphs];
+      newParagraphs.splice(index, 1);
+      setParagraphs(newParagraphs);
+    };
+    
+    const addParagraphDescription = (paraIndex: number) => {
+      const newParagraphs = [...paragraphs];
+      newParagraphs[paraIndex].description.push("");
+      setParagraphs(newParagraphs);
+    };
+    
+    const removeParagraphDescription = (paraIndex: number, descIndex: number) => {
+      const newParagraphs = [...paragraphs];
+      newParagraphs[paraIndex].description.splice(descIndex, 1);
+      setParagraphs(newParagraphs);
+    };
+  
     const handleUpload = async () => {
-      if (imageFiles.length === 0 && otherFiles.length === 0 && audioFiles.length === 0) {
-        setError("Please select at least one file to upload");
+      if (imageFiles.length === 0 && otherFiles.length === 0 && audioFiles.length === 0 && 
+          !contentImageFile && !name.trim() && description.every(d => !d.trim()) && 
+          paragraphs.every(p => !p.title.trim() && p.description.every(d => !d.trim()))) {
+        setError("Please select files or enter content to upload");
         return;
       }
   
@@ -133,6 +244,9 @@ const FileUpload = () => {
         return;
       }
   
+      // Store the current folder ID for this entire upload operation
+      const currentFolderId = nextFolderId;
+  
       try {
         const filesToUpload: {file: File, type: string}[] = [];
         
@@ -140,12 +254,103 @@ const FileUpload = () => {
         otherFiles.forEach(file => filesToUpload.push({file, type: "file"}));
         audioFiles.forEach(file => filesToUpload.push({file, type: "audio"}));
         
-        if (filesToUpload.length === 0) return;
+        // Check if we have any content to store
+        const hasContent = name.trim() || 
+                           description.some(d => d.trim()) || 
+                           paragraphs.some(p => p.title.trim() || p.description.some(d => d.trim()));
         
-        if (text) {
-          const textRef = ref(storage, `demo/${nextFolderId}/text_content.txt`);
-          const textBlob = new Blob([text], { type: 'text/plain' });
-          await uploadBytesResumable(textRef, textBlob);
+        let contentImageUrl: string | null = null;
+        
+        // Upload content image first if exists
+        if (contentImageFile) {
+          const fileExtension = contentImageFile.name.split('.').pop() || '';
+          const timestamp = new Date().getTime();
+          const cleanFileName = `content_image_${timestamp}.${fileExtension}`.toLowerCase();
+          
+          const storagePath = `demo/${currentFolderId}/${cleanFileName}`;
+          const storageRef = ref(storage, storagePath);
+          
+          try {
+            const uploadTask = uploadBytesResumable(storageRef, contentImageFile);
+            
+            await new Promise<void>((resolve, reject) => {
+              uploadTask.on(
+                "state_changed",
+                (snapshot) => {
+                  const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+                  setProgress(progress);
+                },
+                (error) => {
+                  setError(`Content image upload failed: ${error.message}`);
+                  reject(error);
+                },
+                async () => {
+                  contentImageUrl = await getDownloadURL(uploadTask.snapshot.ref);
+                  resolve();
+                }
+              );
+            });
+          } catch (error) {
+            console.error("Failed to upload content image:", error);
+            return;
+          }
+        }
+        
+        // Store structured content in Firestore
+        if (hasContent || contentImageUrl) {
+          try {
+            // Clean up data by removing empty entries
+            const cleanDescription = description.filter(d => d.trim());
+            
+            const cleanParagraphs = paragraphs
+              .filter(p => p.title.trim() || p.description.some(d => d.trim()))
+              .map(p => ({
+                title: p.title,
+                description: p.description.filter(d => d.trim())
+              }));
+            
+            // Create a document in Firestore for this upload with structured content
+            const contentRef = doc(collection(firestore, 'uploads'), `demo_${currentFolderId}`);
+            
+            const contentData: ContentData = {
+              name: name.trim(),
+              description: cleanDescription,
+              paragraphs: cleanParagraphs,
+            };
+            
+            if (contentImageUrl) {
+              contentData.content_image = contentImageUrl;
+            }
+            
+            await setDoc(contentRef, {
+              ...contentData,
+              timestamp: new Date().toISOString(),
+              folderId: currentFolderId,
+              hasFiles: filesToUpload.length > 0
+            });
+            
+            // Also store a reference to the content in the storage folder
+            if (filesToUpload.length > 0) {
+              const contentMetaRef = ref(storage, `demo/${currentFolderId}/content_metadata.json`);
+              const metaBlob = new Blob([JSON.stringify({
+                hasContent: true,
+                firestoreDocId: `demo_${currentFolderId}`
+              })], { type: 'application/json' });
+              await uploadBytesResumable(contentMetaRef, metaBlob);
+            }
+          } catch (error) {
+            console.error("Error storing content in Firestore:", error);
+            setError("Failed to store content");
+            return;
+          }
+        }
+        
+        if (filesToUpload.length === 0) {
+          alert("Content saved successfully!");
+          setError("");
+          setNextFolderId(currentFolderId + 1);
+          resetForm();
+          return;
         }
         
         let completedUploads = 0;
@@ -156,7 +361,7 @@ const FileUpload = () => {
           const timestamp = new Date().getTime() + filesToUpload.indexOf({file, type});
           const cleanFileName = `${type}_${timestamp}.${fileExtension}`.toLowerCase();
           
-          const storagePath = `demo/${nextFolderId}/${cleanFileName}`;
+          const storagePath = `demo/${currentFolderId}/${cleanFileName}`;
           const storageRef = ref(storage, storagePath);
           
           const uploadTask = uploadBytesResumable(storageRef, file);
@@ -173,20 +378,27 @@ const FileUpload = () => {
               setProgress(0);
             },
             async () => {
-              await getDownloadURL(uploadTask.snapshot.ref);
               completedUploads++;
               
               if (completedUploads === totalFiles) {
                 alert("All uploads successful!");
                 setError("");
-                setNextFolderId(prevId => prevId !== null ? prevId + 1 : 1);
+                setNextFolderId(currentFolderId + 1);
                 
                 setImageFiles([]);
                 setOtherFiles([]);
                 setAudioFiles([]);
                 setPreviewUrls([]);
+<<<<<<< HEAD
                 setText("");
                 setTitle("");
+=======
+                setName("");
+                setDescription([""]);
+                setParagraphs([{ title: "", description: [""] }]);
+                removeContentImage();
+                setProgress(0);
+>>>>>>> 92957e67e8baad6a1ffe59df10cc980870e2a66b
               }
             }
           );
@@ -196,183 +408,332 @@ const FileUpload = () => {
         console.error(err);
       }
     };
+    
+    const resetForm = () => {
+      setName("");
+      setDescription([""]);
+      setParagraphs([{ title: "", description: [""] }]);
+      setImageFiles([]);
+      setOtherFiles([]);
+      setAudioFiles([]);
+      setPreviewUrls([]);
+      removeContentImage();
+      setProgress(0);
+    };
 
   return (
    
     <div>
-
-
-    <h1 className="text-2xl font-bold text-gray-800 mb-6 text-center">File Upload</h1>
+      <h1 className="text-2xl font-bold text-gray-800 mb-6 text-center">Content Upload</h1>
   
-    <div className="space-y-6">
-    <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
-          <input
-            type="text"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            className="w-full p-2 border rounded text-gray-700 text-sm"
-            placeholder="Enter a title"
-          />
-        </div>
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">Enter Text</label>
-        <textarea
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          className="w-full p-2 border rounded mb-2 h-32 text-gray-700 text-sm"
-          placeholder="Enter your text here..."
-        />
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">Upload Images</label>
-        <div className="flex flex-col items-center justify-center w-full p-4 border-2 border-dotted border-gray-400 rounded-lg">
-          {previewUrls.length > 0 ? (
-            <div className="grid grid-cols-3 gap-2 w-full">
-              {previewUrls.map((url, index) => (
-                <div key={index} className="relative">
+      <div className="space-y-6">
+        {/* Content section */}
+        <div className="bg-white p-5 rounded-lg shadow-sm border border-gray-200">
+          <h2 className="text-lg font-semibold text-gray-700 mb-4">Content</h2>
+          
+          {/* Content Image Upload */}
+          <div className="mb-5">
+            <label className="block text-sm font-medium text-gray-700 mb-2">Content Image</label>
+            <div className="flex items-center justify-center w-full border-2 border-dotted border-gray-300 rounded-lg mb-2">
+              {contentImagePreview ? (
+                <div className="relative w-full">
                   <Image
-                    src={url}
-                    alt={`Selected image ${index + 1}`}
-                    width={100}
-                    height={100}
-                    className="object-cover w-full h-24 rounded-lg"
+                    src={contentImagePreview}
+                    alt="Content image"
+                    width={300}
+                    height={200}
+                    className="object-cover w-full h-48 rounded-md"
                   />
                   <button
                     type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      removeImage(index);
-                    }}
-                    className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1.5 hover:bg-red-600 transition-colors"
+                    onClick={() => removeContentImage()}
+                    className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1.5 hover:bg-red-600 transition-colors"
+                  >
+                    <MdClose />
+                  </button>
+                </div>
+              ) : (
+                <div 
+                  className="flex flex-col items-center justify-center h-36 w-full cursor-pointer py-6"
+                  onClick={() => document.getElementById("content-image-input")?.click()}
+                >
+                  <MdImage className="text-gray-400 text-5xl mb-2" />
+                  <p className="text-gray-500 text-sm">Upload a featured image for your content</p>
+                  <p className="text-xs text-gray-400 mt-1">This image will be stored with your content</p>
+                </div>
+              )}
+              <input
+                id="content-image-input"
+                type="file"
+                onChange={handleContentImageChange}
+                accept="image/*"
+                className="hidden"
+              />
+            </div>
+          </div>
+          
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">Name</label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="w-full p-2 border rounded text-gray-700 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              placeholder="Enter a name..."
+            />
+          </div>
+          
+          <div className="mb-6">
+            <div className="flex justify-between items-center mb-2">
+              <label className="block text-sm font-medium text-gray-700">Description</label>
+              <button 
+                type="button" 
+                onClick={addDescriptionField}
+                className="text-blue-500 hover:text-blue-700 text-sm flex items-center"
+              >
+                <MdAdd className="mr-1" /> Add Description
+              </button>
+            </div>
+            
+            {description.map((desc, index) => (
+              <div key={`desc-${index}`} className="mb-2 relative">
+                <textarea
+                  value={desc}
+                  onChange={(e) => handleDescriptionChange(index, e.target.value)}
+                  className="w-full p-2 border rounded text-gray-700 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Enter description..."
+                  rows={3}
+                />
+                {description.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => removeDescriptionField(index)}
+                    className="absolute top-2 right-2 text-red-500 hover:text-red-700"
+                  >
+                    <MdDelete />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+          
+          <div>
+            <div className="flex justify-between items-center mb-2">
+              <label className="block text-sm font-medium text-gray-700">Paragraphs</label>
+              <button 
+                type="button" 
+                onClick={addParagraph}
+                className="text-blue-500 hover:text-blue-700 text-sm flex items-center"
+              >
+                <MdAdd className="mr-1" /> Add Paragraph
+              </button>
+            </div>
+            
+            {paragraphs.map((para, paraIndex) => (
+              <div key={`para-${paraIndex}`} className="mb-6 p-4 border border-gray-200 rounded-lg">
+                <div className="flex justify-between items-center mb-2">
+                  <label className="block text-sm font-medium text-gray-700">Paragraph Title</label>
+                  {paragraphs.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => removeParagraph(paraIndex)}
+                      className="text-red-500 hover:text-red-700 text-sm flex items-center"
+                    >
+                      <MdDelete className="mr-1" /> Remove Paragraph
+                    </button>
+                  )}
+                </div>
+                
+                <input
+                  type="text"
+                  value={para.title}
+                  onChange={(e) => handleParagraphTitleChange(paraIndex, e.target.value)}
+                  className="w-full p-2 border rounded text-gray-700 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent mb-3"
+                  placeholder="Enter paragraph title..."
+                />
+                
+                <div className="flex justify-between items-center mb-2">
+                  <label className="block text-sm font-medium text-gray-700">Paragraph Description</label>
+                  <button 
+                    type="button" 
+                    onClick={() => addParagraphDescription(paraIndex)}
+                    className="text-blue-500 hover:text-blue-700 text-sm flex items-center"
+                  >
+                    <MdAdd className="mr-1" /> Add Description
+                  </button>
+                </div>
+                
+                {para.description.map((desc, descIndex) => (
+                  <div key={`para-${paraIndex}-desc-${descIndex}`} className="mb-2 relative">
+                    <textarea
+                      value={desc}
+                      onChange={(e) => handleParagraphDescriptionChange(paraIndex, descIndex, e.target.value)}
+                      className="w-full p-2 border rounded text-gray-700 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="Enter paragraph description..."
+                      rows={3}
+                    />
+                    {para.description.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => removeParagraphDescription(paraIndex, descIndex)}
+                        className="absolute top-2 right-2 text-red-500 hover:text-red-700"
+                      >
+                        <MdDelete />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Upload Images</label>
+          <div className="flex flex-col items-center justify-center w-full p-4 border-2 border-dotted border-gray-400 rounded-lg">
+            {previewUrls.length > 0 ? (
+              <div className="grid grid-cols-3 gap-2 w-full">
+                {previewUrls.map((url, index) => (
+                  <div key={index} className="relative">
+                    <Image
+                      src={url}
+                      alt={`Selected image ${index + 1}`}
+                      width={100}
+                      height={100}
+                      className="object-cover w-full h-24 rounded-lg"
+                    />
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removeImage(index);
+                      }}
+                      className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1.5 hover:bg-red-600 transition-colors"
+                    >
+                      <MdClose />
+                    </button>
+                  </div>
+                ))}
+                <div 
+                  className="flex flex-col items-center justify-center h-24 bg-gray-100 rounded-lg cursor-pointer hover:bg-gray-200"
+                  onClick={() => document.getElementById("image-input")?.click()}
+                >
+                  <span className="text-3xl text-gray-400">+</span>
+                  <span className="text-xs text-gray-500">Add More</span>
+                </div>
+              </div>
+            ) : (
+              <div 
+                className="flex flex-col items-center cursor-pointer"
+                onClick={() => document.getElementById("image-input")?.click()}
+              >
+                <Image
+                  src="/add-image.png"
+                  alt="Upload Placeholder"
+                  width={64}
+                  height={64}
+                  className="w-16 h-16 opacity-50"
+                />
+                <p className="text-gray-500 text-sm mt-2">Upload Images</p>
+              </div>
+            )}
+            <input
+              id="image-input"
+              type="file"
+              onChange={handleImageChange}
+              accept="image/*"
+              className="hidden"
+              multiple
+            />
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Choose Files {otherFiles.length > 0 && `(${otherFiles.length} selected)`}
+          </label>
+          <input
+            type="file"
+            onChange={handleFileChange}
+            className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+            multiple
+          />
+          {otherFiles.length > 0 && (
+            <div className="mt-2 text-xs text-gray-500">
+              {otherFiles.map((file, index) => (
+                <div key={index} className="flex items-center justify-between py-1">
+                  <span>{file.name.length > 25 ? file.name.substring(0, 25) + '...' : file.name}</span>
+                  <button 
+                    onClick={() => setOtherFiles(otherFiles.filter((_, i) => i !== index))}
+                    className="text-red-500 hover:text-red-700"
                   >
                     <MdClose />
                   </button>
                 </div>
               ))}
-              <div 
-                className="flex flex-col items-center justify-center h-24 bg-gray-100 rounded-lg cursor-pointer hover:bg-gray-200"
-                onClick={() => document.getElementById("image-input")?.click()}
-              >
-                <span className="text-3xl text-gray-400">+</span>
-                <span className="text-xs text-gray-500">Add More</span>
-              </div>
-            </div>
-          ) : (
-            <div 
-              className="flex flex-col items-center cursor-pointer"
-              onClick={() => document.getElementById("image-input")?.click()}
-            >
-              <Image
-                src="/add-image.png"
-                alt="Upload Placeholder"
-                width={64}
-                height={64}
-                className="w-16 h-16 opacity-50"
-              />
-              <p className="text-gray-500 text-sm mt-2">Upload Images</p>
             </div>
           )}
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Upload Audio {audioFiles.length > 0 && `(${audioFiles.length} selected)`}
+          </label>
           <input
-            id="image-input"
             type="file"
-            onChange={handleImageChange}
-            accept="image/*"
-            className="hidden"
+            accept="audio/*"
+            onChange={handleAudioChange}
+            className="text-gray-500 text-sm"
             multiple
           />
+          {audioFiles.length > 0 && (
+            <div className="mt-2 text-xs text-gray-500">
+              {audioFiles.map((file, index) => (
+                <div key={index} className="flex items-center justify-between py-1">
+                  <span>{file.name.length > 25 ? file.name.substring(0, 25) + '...' : file.name}</span>
+                  <button 
+                    onClick={() => setAudioFiles(audioFiles.filter((_, i) => i !== index))}
+                    className="text-red-500 hover:text-red-700"
+                  >
+                    <MdClose />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
-      </div>
 
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Choose Files {otherFiles.length > 0 && `(${otherFiles.length} selected)`}
-        </label>
-        <input
-          type="file"
-          onChange={handleFileChange}
-          className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-          multiple
-        />
-        {otherFiles.length > 0 && (
-          <div className="mt-2 text-xs text-gray-500">
-            {otherFiles.map((file, index) => (
-              <div key={index} className="flex items-center justify-between py-1">
-                <span>{file.name.length > 25 ? file.name.substring(0, 25) + '...' : file.name}</span>
-                <button 
-                  onClick={() => setOtherFiles(otherFiles.filter((_, i) => i !== index))}
-                  className="text-red-500 hover:text-red-700"
-                >
-                  <MdClose />
-                </button>
-              </div>
-            ))}
+        <button
+          onClick={handleUpload}
+          disabled={(imageFiles.length === 0 && otherFiles.length === 0 && audioFiles.length === 0)}
+          className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+        >
+          Upload Content
+        </button>
+
+        {progress > 0 && (
+          <div className="pt-4">
+            <div className="flex justify-between mb-1">
+              <span className="text-sm font-medium text-blue-600">Progress</span>
+              <span className="text-sm font-medium text-blue-600">{progress.toFixed(1)}%</span>
+            </div>
+            <div className="h-2 bg-gray-200 rounded-full">
+              <div
+                className="h-2 bg-blue-600 rounded-full transition-all duration-300"
+                style={{ width: `${progress}%` }}
+              ></div>
+            </div>
+          </div>
+        )}
+
+        {error && (
+          <div className="p-4 text-sm text-red-700 bg-red-100 rounded-lg" role="alert">
+            {error}
           </div>
         )}
       </div>
-
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Upload Audio {audioFiles.length > 0 && `(${audioFiles.length} selected)`}
-        </label>
-        <input
-          type="file"
-          accept="audio/*"
-          onChange={handleAudioChange}
-          className="text-gray-500 text-sm"
-          multiple
-        />
-        {audioFiles.length > 0 && (
-          <div className="mt-2 text-xs text-gray-500">
-            {audioFiles.map((file, index) => (
-              <div key={index} className="flex items-center justify-between py-1">
-                <span>{file.name.length > 25 ? file.name.substring(0, 25) + '...' : file.name}</span>
-                <button 
-                  onClick={() => setAudioFiles(audioFiles.filter((_, i) => i !== index))}
-                  className="text-red-500 hover:text-red-700"
-                >
-                  <MdClose />
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <button
-        onClick={handleUpload}
-        disabled={(imageFiles.length === 0 && otherFiles.length === 0 && audioFiles.length === 0)}
-        className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-      >
-        Upload Content
-      </button>
-
-      {progress > 0 && (
-        <div className="pt-4">
-          <div className="flex justify-between mb-1">
-            <span className="text-sm font-medium text-blue-600">Progress</span>
-            <span className="text-sm font-medium text-blue-600">{progress.toFixed(1)}%</span>
-          </div>
-          <div className="h-2 bg-gray-200 rounded-full">
-            <div
-              className="h-2 bg-blue-600 rounded-full transition-all duration-300"
-              style={{ width: `${progress}%` }}
-            ></div>
-          </div>
-        </div>
-      )}
-
-      {error && (
-        <div className="p-4 text-sm text-red-700 bg-red-100 rounded-lg" role="alert">
-          {error}
-        </div>
-      )}
     </div>
-
-    </div>
-
-  )
-}
+  );
+};
 
 export default FileUpload;
