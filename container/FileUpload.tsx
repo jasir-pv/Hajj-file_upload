@@ -10,7 +10,6 @@ import Image from "next/image";
 const storage = getStorage()
 const firestore = getFirestore()
 
-
 interface ParagraphItem {
   title: string;
   description: string[];
@@ -21,24 +20,21 @@ interface ContentData {
   description: string[];
   paragraphs: ParagraphItem[];
   content_image?: string;
-  category: "hajj" | "umrah";
+  category: "hajj" | "umrah" | "madina";
 }
 
-type TabType = "hajj" | "umrah";
+type TabType = "hajj" | "umrah" | "madina";
 
 const FileUpload = () => {
     const [activeTab, setActiveTab] = useState<TabType>("hajj");
     const [imageFiles, setImageFiles] = useState<File[]>([]);
     const [contentImageFile, setContentImageFile] = useState<File | null>(null);
     const [otherFiles, setOtherFiles] = useState<File[]>([]);
-    
-    // Updated state for structured content
     const [name, setName] = useState("");
     const [description, setDescription] = useState<string[]>([""]);
     const [paragraphs, setParagraphs] = useState<ParagraphItem[]>([
       { title: "", description: [""] }
     ]);
-    
     const [audioFiles, setAudioFiles] = useState<File[]>([]);
     const [progress, setProgress] = useState(0);
     const [error, setError] = useState("");
@@ -46,18 +42,22 @@ const FileUpload = () => {
     const [contentImagePreview, setContentImagePreview] = useState<string | null>(null);
     const [hajjFolderId, setHajjFolderId] = useState<number | null>(null);
     const [umrahFolderId, setUmrahFolderId] = useState<number | null>(null);
+    const [madinaFolderId, setMadinaFolderId] = useState<number | null>(null);
   
-    // Get current folder ID based on active tab
     const getCurrentFolderId = () => {
-      return activeTab === "hajj" ? hajjFolderId : umrahFolderId;
+      switch (activeTab) {
+        case "hajj": return hajjFolderId;
+        case "umrah": return umrahFolderId;
+        case "madina": return madinaFolderId;
+        default: return null;
+      }
     };
   
-    // Set folder ID based on active tab
     const setCurrentFolderId = (id: number) => {
-      if (activeTab === "hajj") {
-        setHajjFolderId(id);
-      } else {
-        setUmrahFolderId(id);
+      switch (activeTab) {
+        case "hajj": setHajjFolderId(id); break;
+        case "umrah": setUmrahFolderId(id); break;
+        case "madina": setMadinaFolderId(id); break;
       }
     };
   
@@ -69,20 +69,18 @@ const FileUpload = () => {
   
     useEffect(() => {
       return () => {
-        previewUrls.forEach(url => {
-          URL.revokeObjectURL(url);
-        });
+        previewUrls.forEach(url => URL.revokeObjectURL(url));
       };
     }, [previewUrls]);
   
     useEffect(() => {
-      // Fetch folder IDs for both categories when component mounts
       fetchFolderIds();
     }, []);
     
     const fetchFolderIds = async () => {
       await fetchFolderIdForCategory("hajj");
       await fetchFolderIdForCategory("umrah");
+      await fetchFolderIdForCategory("madina");
     };
     
     const fetchFolderIdForCategory = async (category: TabType) => {
@@ -100,15 +98,19 @@ const FileUpload = () => {
         
         if (category === "hajj") {
           setHajjFolderId(highestId + 1);
-        } else {
+        } else if (category === "umrah") {
           setUmrahFolderId(highestId + 1);
+        } else {
+          setMadinaFolderId(highestId + 1);
         }
       } catch (error) {
         console.error(`Error fetching folder IDs for ${category}:`, error);
         if (category === "hajj") {
           setHajjFolderId(1);
-        } else {
+        } else if (category === "umrah") {
           setUmrahFolderId(1);
+        } else {
+          setMadinaFolderId(1);
         }
       }
     };
@@ -460,7 +462,7 @@ const FileUpload = () => {
       <h1 className="text-2xl font-bold text-gray-800 mb-6 text-center">Content Upload</h1>
   
       <div className="space-y-6">
-        {/* Tab Navigation */}
+        {/* Updated Tab Navigation with Madina */}
         <div className="flex border-b border-gray-200">
           <button
             className={`py-4 px-6 text-center border-b-2 transition-colors flex-1 font-medium ${
@@ -482,12 +484,23 @@ const FileUpload = () => {
           >
             Umrah
           </button>
+          <button
+            className={`py-4 px-6 text-center border-b-2 transition-colors flex-1 font-medium ${
+              activeTab === "madina"
+                ? "border-blue-500 text-blue-600"
+                : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+            }`}
+            onClick={() => setActiveTab("madina")}
+          >
+            Madina
+          </button>
         </div>
         
-        {/* Content section */}
+        {/* Content section - updated title */}
         <div className="bg-white p-5 rounded-lg shadow-sm border border-gray-200">
           <h2 className="text-lg font-semibold text-gray-700 mb-4">
-            {activeTab === "hajj" ? "Hajj Content" : "Umrah Content"}
+            {activeTab === "hajj" ? "Hajj Content" : 
+             activeTab === "umrah" ? "Umrah Content" : "Madina Content"}
           </h2>
           
           {/* Content Image Upload */}
