@@ -24,7 +24,6 @@ interface ContentData {
 }
 
 const FileUpload = () => {
-
     const [imageFiles, setImageFiles] = useState<File[]>([]);
     const [contentImageFile, setContentImageFile] = useState<File | null>(null);
     const [otherFiles, setOtherFiles] = useState<File[]>([]);
