@@ -10,7 +10,7 @@ import Image from "next/image";
 const storage = getStorage()
 const firestore = getFirestore()
 
-// Define interfaces for our data structure
+
 interface ParagraphItem {
   title: string;
   description: string[];
@@ -386,7 +386,7 @@ const FileUpload = () => {
           setCurrentFolderId(currentFolderId + 1);
           resetForm();
           return;
-        }
+        } 
         
         let completedUploads = 0;
         const totalFiles = filesToUpload.length;
