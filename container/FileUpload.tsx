@@ -21,9 +21,13 @@ interface ContentData {
   description: string[];
   paragraphs: ParagraphItem[];
   content_image?: string;
+  category: "hajj" | "umrah";
 }
 
+type TabType = "hajj" | "umrah";
+
 const FileUpload = () => {
+    const [activeTab, setActiveTab] = useState<TabType>("hajj");
     const [imageFiles, setImageFiles] = useState<File[]>([]);
     const [contentImageFile, setContentImageFile] = useState<File | null>(null);
     const [otherFiles, setOtherFiles] = useState<File[]>([]);
@@ -40,7 +44,22 @@ const FileUpload = () => {
     const [error, setError] = useState("");
     const [previewUrls, setPreviewUrls] = useState<string[]>([]);
     const [contentImagePreview, setContentImagePreview] = useState<string | null>(null);
-    const [nextFolderId, setNextFolderId] = useState<number | null>(null);
+    const [hajjFolderId, setHajjFolderId] = useState<number | null>(null);
+    const [umrahFolderId, setUmrahFolderId] = useState<number | null>(null);
+  
+    // Get current folder ID based on active tab
+    const getCurrentFolderId = () => {
+      return activeTab === "hajj" ? hajjFolderId : umrahFolderId;
+    };
+  
+    // Set folder ID based on active tab
+    const setCurrentFolderId = (id: number) => {
+      if (activeTab === "hajj") {
+        setHajjFolderId(id);
+      } else {
+        setUmrahFolderId(id);
+      }
+    };
   
     useEffect(() => {
       signInAnonymousUser().catch(() => {
@@ -57,27 +76,42 @@ const FileUpload = () => {
     }, [previewUrls]);
   
     useEffect(() => {
-      const fetchHighestFolderId = async () => {
-        try {
-          const demoRef = ref(storage, 'demo');
-          const result = await listAll(demoRef);
-          
-          const folderIds = result.prefixes.map(folderRef => {
-            const folderName = folderRef.name;
-            const folderId = parseInt(folderName, 10);
-            return isNaN(folderId) ? 0 : folderId;
-          });
-          
-          const highestId = folderIds.length > 0 ? Math.max(...folderIds) : 0;
-          setNextFolderId(highestId + 1);
-        } catch (error) {
-          console.error("Error fetching folder IDs:", error);
-          setNextFolderId(1);
-        }
-      };
-      
-      fetchHighestFolderId();
+      // Fetch folder IDs for both categories when component mounts
+      fetchFolderIds();
     }, []);
+    
+    const fetchFolderIds = async () => {
+      await fetchFolderIdForCategory("hajj");
+      await fetchFolderIdForCategory("umrah");
+    };
+    
+    const fetchFolderIdForCategory = async (category: TabType) => {
+      try {
+        const categoryRef = ref(storage, category);
+        const result = await listAll(categoryRef);
+        
+        const folderIds = result.prefixes.map(folderRef => {
+          const folderName = folderRef.name;
+          const folderId = parseInt(folderName, 10);
+          return isNaN(folderId) ? 0 : folderId;
+        });
+        
+        const highestId = folderIds.length > 0 ? Math.max(...folderIds) : 0;
+        
+        if (category === "hajj") {
+          setHajjFolderId(highestId + 1);
+        } else {
+          setUmrahFolderId(highestId + 1);
+        }
+      } catch (error) {
+        console.error(`Error fetching folder IDs for ${category}:`, error);
+        if (category === "hajj") {
+          setHajjFolderId(1);
+        } else {
+          setUmrahFolderId(1);
+        }
+      }
+    };
   
     useEffect(() => {
       return () => {
@@ -239,13 +273,12 @@ const FileUpload = () => {
         return;
       }
     
-      if (nextFolderId === null) {
+      const currentFolderId = getCurrentFolderId();
+      
+      if (currentFolderId === null) {
         setError("Preparing upload location, please try again in a moment");
         return;
       }
-  
-      // Store the current folder ID for this entire upload operation
-      const currentFolderId = nextFolderId;
   
       try {
         const filesToUpload: {file: File, type: string}[] = [];
@@ -267,7 +300,7 @@ const FileUpload = () => {
           const timestamp = new Date().getTime();
           const cleanFileName = `content_image_${timestamp}.${fileExtension}`.toLowerCase();
           
-          const storagePath = `demo/${currentFolderId}/${cleanFileName}`;
+          const storagePath = `${activeTab}/${currentFolderId}/${cleanFileName}`;
           const storageRef = ref(storage, storagePath);
           
           try {
@@ -310,12 +343,13 @@ const FileUpload = () => {
               }));
             
             // Create a document in Firestore for this upload with structured content
-            const contentRef = doc(collection(firestore, 'uploads'), `demo_${currentFolderId}`);
+            const contentRef = doc(collection(firestore, 'uploads'), `${activeTab}_${currentFolderId}`);
             
             const contentData: ContentData = {
               name: name.trim(),
               description: cleanDescription,
               paragraphs: cleanParagraphs,
+              category: activeTab,
             };
             
             if (contentImageUrl) {
@@ -331,10 +365,10 @@ const FileUpload = () => {
             
             // Also store a reference to the content in the storage folder
             if (filesToUpload.length > 0) {
-              const contentMetaRef = ref(storage, `demo/${currentFolderId}/content_metadata.json`);
+              const contentMetaRef = ref(storage, `${activeTab}/${currentFolderId}/content_metadata.json`);
               const metaBlob = new Blob([JSON.stringify({
                 hasContent: true,
-                firestoreDocId: `demo_${currentFolderId}`
+                firestoreDocId: `${activeTab}_${currentFolderId}`
               })], { type: 'application/json' });
               await uploadBytesResumable(contentMetaRef, metaBlob);
             }
@@ -348,7 +382,8 @@ const FileUpload = () => {
         if (filesToUpload.length === 0) {
           alert("Content saved successfully!");
           setError("");
-          setNextFolderId(currentFolderId + 1);
+          // Increment folder ID for the NEXT upload operation
+          setCurrentFolderId(currentFolderId + 1);
           resetForm();
           return;
         }
@@ -361,7 +396,7 @@ const FileUpload = () => {
           const timestamp = new Date().getTime() + filesToUpload.indexOf({file, type});
           const cleanFileName = `${type}_${timestamp}.${fileExtension}`.toLowerCase();
           
-          const storagePath = `demo/${currentFolderId}/${cleanFileName}`;
+          const storagePath = `${activeTab}/${currentFolderId}/${cleanFileName}`;
           const storageRef = ref(storage, storagePath);
           
           const uploadTask = uploadBytesResumable(storageRef, file);
@@ -383,7 +418,8 @@ const FileUpload = () => {
               if (completedUploads === totalFiles) {
                 alert("All uploads successful!");
                 setError("");
-                setNextFolderId(currentFolderId + 1);
+                // Increment folder ID for the next upload
+                setCurrentFolderId(currentFolderId + 1);
                 
                 setImageFiles([]);
                 setOtherFiles([]);
@@ -422,9 +458,35 @@ const FileUpload = () => {
       <h1 className="text-2xl font-bold text-gray-800 mb-6 text-center">Content Upload</h1>
   
       <div className="space-y-6">
+        {/* Tab Navigation */}
+        <div className="flex border-b border-gray-200">
+          <button
+            className={`py-4 px-6 text-center border-b-2 transition-colors flex-1 font-medium ${
+              activeTab === "hajj"
+                ? "border-blue-500 text-blue-600"
+                : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+            }`}
+            onClick={() => setActiveTab("hajj")}
+          >
+            Hajj
+          </button>
+          <button
+            className={`py-4 px-6 text-center border-b-2 transition-colors flex-1 font-medium ${
+              activeTab === "umrah"
+                ? "border-blue-500 text-blue-600"
+                : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+            }`}
+            onClick={() => setActiveTab("umrah")}
+          >
+            Umrah
+          </button>
+        </div>
+        
         {/* Content section */}
         <div className="bg-white p-5 rounded-lg shadow-sm border border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-700 mb-4">Content</h2>
+          <h2 className="text-lg font-semibold text-gray-700 mb-4">
+            {activeTab === "hajj" ? "Hajj Content" : "Umrah Content"}
+          </h2>
           
           {/* Content Image Upload */}
           <div className="mb-5">
