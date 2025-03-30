@@ -389,16 +389,11 @@ const FileUpload = () => {
                 setOtherFiles([]);
                 setAudioFiles([]);
                 setPreviewUrls([]);
-<<<<<<< HEAD
-                setText("");
-                setTitle("");
-=======
                 setName("");
                 setDescription([""]);
                 setParagraphs([{ title: "", description: [""] }]);
                 removeContentImage();
                 setProgress(0);
->>>>>>> 92957e67e8baad6a1ffe59df10cc980870e2a66b
               }
             }
           );
