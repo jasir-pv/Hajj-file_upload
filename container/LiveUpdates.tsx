@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { MdClose } from 'react-icons/md';
-import { ref, uploadBytesResumable, getDownloadURL, getStorage } from "firebase/storage";
+import { ref, uploadBytesResumable, getDownloadURL, getStorage, listAll } from "firebase/storage";
 import { signInAnonymousUser } from "../utils/firebase";
 import Image from 'next/image';
 
@@ -17,15 +17,7 @@ type UpdateItem = {
 };
 
 const LiveUpdates = () => {
-  const [updates, setUpdates] = useState<UpdateItem[]>([
-    {
-      id: "1",
-      title: "Hajj 2024 Registration Opens",
-      date: "May 15, 2024",
-      description: "The Ministry of Hajj and Umrah has announced the opening of registration for Hajj 2024.",
-      imageUrl: "/live-update.jpg"
-    }
-  ]);
+  const [updates, setUpdates] = useState<UpdateItem[]>([]);
   const [newUpdate, setNewUpdate] = useState({
     title: "",
     date: "",
@@ -36,6 +28,7 @@ const LiveUpdates = () => {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
+  const [nextFolderId, setNextFolderId] = useState<number | null>(null);
 
   useEffect(() => {
     signInAnonymousUser().catch(() => {
@@ -50,6 +43,29 @@ const LiveUpdates = () => {
       }
     };
   }, [previewUrl]);
+
+  useEffect(() => {
+    const fetchHighestFolderId = async () => {
+      try {
+        const liveUpdatesRef = ref(storage, 'live_updates');
+        const result = await listAll(liveUpdatesRef);
+        
+        const folderIds = result.prefixes.map(folderRef => {
+          const folderName = folderRef.name;
+          const folderId = parseInt(folderName, 10);
+          return isNaN(folderId) ? 0 : folderId;
+        });
+        
+        const highestId = folderIds.length > 0 ? Math.max(...folderIds) : 0;
+        setNextFolderId(highestId + 1);
+      } catch (error) {
+        console.error("Error fetching folder IDs:", error);
+        setNextFolderId(1);
+      }
+    };
+    
+    fetchHighestFolderId();
+  }, []);
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setError("");
@@ -66,12 +82,48 @@ const LiveUpdates = () => {
     }
   };
 
+  const uploadUpdate = async (imageUrl: string | null = null) => {
+    if (!storage) {
+      setError("Storage service not available");
+      return null;
+    }
+  
+    if (nextFolderId === null) {
+      setError("Preparing upload location, please try again in a moment");
+      return null;
+    }
+
+    try {
+      const updateData = {
+        id: Date.now().toString(),
+        title: newUpdate.title,
+        date: newUpdate.date,
+        description: newUpdate.description,
+        imageUrl: imageUrl || undefined
+      };
+
+      // Create a JSON file with the update data
+      const jsonRef = ref(storage, `live_updates/${nextFolderId}/update_data.json`);
+      const jsonBlob = new Blob([JSON.stringify(updateData)], { type: 'application/json' });
+      
+      await uploadBytesResumable(jsonRef, jsonBlob);
+      
+      return updateData;
+    } catch (err) {
+      setError("Failed to save update data");
+      console.error(err);
+      return null;
+    }
+  };
+
   const uploadImage = async (): Promise<string | null> => {
-    if (!imageFile || !newUpdate.title) return null;
+    if (!imageFile || !newUpdate.title || !storage) return null;
 
     try {
       setIsUploading(true);
-      const storagePath = `updates/${Date.now()}_${imageFile.name}`;
+      const fileExtension = imageFile.name.split('.').pop() || '';
+      const cleanFileName = `image_${Date.now()}.${fileExtension}`.toLowerCase();
+      const storagePath = `live_updates/${nextFolderId}/${cleanFileName}`;
       const storageRef = ref(storage, storagePath);
       
       return new Promise((resolve, reject) => {
@@ -120,15 +172,19 @@ const LiveUpdates = () => {
       let imageUrl = null;
       if (imageFile) {
         imageUrl = await uploadImage();
+        if (!imageUrl) {
+          setError("Failed to upload image");
+          return;
+        }
       }
 
-      const updateItem: UpdateItem = {
-        id: Date.now().toString(),
-        ...newUpdate,
-        imageUrl: imageUrl || undefined
-      };
+      const updateData = await uploadUpdate(imageUrl);
+      if (!updateData) {
+        setError("Failed to save update");
+        return;
+      }
 
-      setUpdates([updateItem, ...updates]);
+      setUpdates([updateData, ...updates]);
       setNewUpdate({
         title: "",
         date: "",
@@ -137,8 +193,10 @@ const LiveUpdates = () => {
       setImageFile(null);
       setPreviewUrl(null);
       setError("");
+      setNextFolderId(prevId => prevId !== null ? prevId + 1 : 1);
     } catch (error) {
       console.error("Error adding update:", error);
+      setError("Failed to add update");
     }
   };
 
@@ -186,7 +244,7 @@ const LiveUpdates = () => {
             />
           </div>
 
-          {/* Image Upload Section - Updated to match FileUpload */}
+          {/* Image Upload Section */}
           <div className="flex flex-col items-center justify-center w-full p-4 border-2 border-dotted border-gray-400 rounded-lg">
             {previewUrl ? (
               <div className="relative">

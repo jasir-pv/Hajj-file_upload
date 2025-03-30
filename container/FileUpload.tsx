@@ -186,6 +186,7 @@ const FileUpload = () => {
                 setAudioFiles([]);
                 setPreviewUrls([]);
                 setText("");
+                setTitle("");
               }
             }
           );
