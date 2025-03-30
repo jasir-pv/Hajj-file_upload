@@ -4,7 +4,7 @@ import { useState } from "react";
 import LiveUpdates from "@/container/LiveUpdates";
 import FileUpload from "@/container/FileUpload";
 import UpcomingEvents from "@/container/UpcomingEvents";
-import TravelAdviseries from "@/container/TravelAdviseries";
+import TravelAdviseries from "@/container/TravelAdvisories";
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<string>("file-upload");
