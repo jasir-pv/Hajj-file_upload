@@ -342,8 +342,9 @@ const FileUpload = () => {
                 description: p.description.filter(d => d.trim())
               }));
             
-            // Create a document in Firestore for this upload with structured content
-            const contentRef = doc(collection(firestore, 'uploads'), `${activeTab}_${currentFolderId}`);
+            // Create a document in Firestore using separate collections for Hajj and Umrah
+            const collectionName = `${activeTab}_uploads`;
+            const contentRef = doc(collection(firestore, collectionName), `${currentFolderId}`);
             
             const contentData: ContentData = {
               name: name.trim(),
@@ -368,7 +369,8 @@ const FileUpload = () => {
               const contentMetaRef = ref(storage, `${activeTab}/${currentFolderId}/content_metadata.json`);
               const metaBlob = new Blob([JSON.stringify({
                 hasContent: true,
-                firestoreDocId: `${activeTab}_${currentFolderId}`
+                firestoreCollection: collectionName,
+                firestoreDocId: `${currentFolderId}`
               })], { type: 'application/json' });
               await uploadBytesResumable(contentMetaRef, metaBlob);
             }
