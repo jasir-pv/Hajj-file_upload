@@ -4,7 +4,8 @@ import { useState } from "react";
 import LiveUpdates from "@/container/LiveUpdates";
 import FileUpload from "@/container/FileUpload";
 import UpcomingEvents from "@/container/UpcomingEvents";
-import TravelAdviseries from "@/container/TravelAdvisories";
+import TravelAdvisories from "@/container/TravelAdvisories";
+import HistoricPlaces from "@/container/HistoricPlaces";
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<string>("file-upload");
@@ -24,6 +25,17 @@ export default function Home() {
             }`}
           >
             File Upload
+          </button>
+
+          <button
+            onClick={() => setActiveTab("historic-places")}
+            className={`px-2 py-1 rounded-md text-xs ${
+              activeTab === "historic-places"
+                ? "bg-blue-600 text-white"
+                : "bg-gray-200 text-gray-700"
+            }`}
+          >
+            Historic Places
           </button>
 
           <button
@@ -57,6 +69,8 @@ export default function Home() {
           >
             Travel Advisories
           </button>
+
+
         </div>
 
         {/* Content Sections */}
@@ -64,7 +78,8 @@ export default function Home() {
           {activeTab === "file-upload" && <FileUpload />}
           {activeTab === "live-updates" && <LiveUpdates />}
           {activeTab === "upcoming-events" && <UpcomingEvents />}
-          {activeTab === "travel-advisory" && <TravelAdviseries />}
+          {activeTab === "travel-advisories" && <TravelAdvisories />}
+          {activeTab === "historic-places" && <HistoricPlaces />}
         </div>
       </div>
     </div>
