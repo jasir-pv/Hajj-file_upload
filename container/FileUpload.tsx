@@ -150,7 +150,7 @@ const FileUpload = () => {
         const selectedFiles = Array.from(e.target.files);
         setOtherFiles([...otherFiles, ...selectedFiles]);
       }
-    };
+    };      
   
     const handleAudioChange = (e: React.ChangeEvent<HTMLInputElement>) => {
       setError("");
