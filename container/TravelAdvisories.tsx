@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { MdClose, MdAdd } from 'react-icons/md';
-import { ref, uploadBytesResumable, getDownloadURL, getStorage, listAll } from "firebase/storage";
+import { ref, uploadBytesResumable, getDownloadURL, getStorage, listAll, deleteObject } from "firebase/storage";
 import { signInAnonymousUser } from "../utils/firebase";
 
 const storage = getStorage();
@@ -26,85 +26,91 @@ const TravelAdvisories = () => {
   const [nextFolderId, setNextFolderId] = useState<number | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const fetchAdvisories = async () => {
+    try {
+      setIsLoading(true);
+      setError("");
+      const advisoriesRef = ref(storage, 'travel_advisories');
+      const result = await listAll(advisoriesRef);
+      
+      const advisoryPromises = result.prefixes.map(async (folderRef) => {
+        try {
+          const advisoryFileRef = ref(storage, `${folderRef.fullPath}/advisory_data.json`);
+          const url = await getDownloadURL(advisoryFileRef);
+          const response = await fetch(url);
+          if (!response.ok) throw new Error('Failed to fetch advisory');
+          const data = await response.json();
+          return data;
+        } catch (error) {
+          console.error(`Error loading advisory from ${folderRef.name}:`, error);
+          return null;
+        }
+      });
+
+      const loadedAdvisories = (await Promise.all(advisoryPromises)).filter(Boolean);
+      setAdvisories(loadedAdvisories);
+    } catch (error) {
+      console.error("Error fetching advisories:", error);
+      setError("Failed to load advisories. Please refresh the page.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   useEffect(() => {
-    signInAnonymousUser().catch(() => {
-      setError("Authentication failed. Uploads may not work properly.");
-    });
-  }, []);
-
-  useEffect(() => {
-    const fetchHighestFolderId = async () => {
+    const initialize = async () => {
       try {
+        await signInAnonymousUser();
+        await fetchAdvisories();
+        
+        // Get next folder ID
         const advisoriesRef = ref(storage, 'travel_advisories');
         const result = await listAll(advisoriesRef);
-        
         const folderIds = result.prefixes.map(folderRef => {
-          const folderName = folderRef.name;
-          const folderId = parseInt(folderName, 10);
-          return isNaN(folderId) ? 0 : folderId;
+          const id = parseInt(folderRef.name, 10);
+          return isNaN(id) ? 0 : id;
         });
-        
-        const highestId = folderIds.length > 0 ? Math.max(...folderIds) : 0;
-        setNextFolderId(highestId + 1);
+        setNextFolderId(folderIds.length > 0 ? Math.max(...folderIds) + 1 : 1);
       } catch (error) {
-        console.error("Error fetching folder IDs:", error);
-        setNextFolderId(1);
+        console.error("Initialization error:", error);
+        setError("Initialization failed. Please refresh the page.");
       }
     };
-    
-    fetchHighestFolderId();
+
+    initialize();
   }, []);
 
-  const saveAdvisoryToFirebase = async (advisory: Advisory): Promise<boolean> => {
-    if (!storage) {
-      setError("Storage service not available");
-      return false;
-    }
-  
-    if (nextFolderId === null) {
-      setError("Preparing upload location, please try again in a moment");
+  const saveAdvisoryToFirebase = async (advisory: Advisory) => {
+    if (!nextFolderId) {
+      setError("System not ready. Please try again.");
       return false;
     }
 
     try {
       setIsUploading(true);
+      setError("");
       const advisoryRef = ref(storage, `travel_advisories/${nextFolderId}/advisory_data.json`);
-      const advisoryBlob = new Blob([JSON.stringify(advisory)], { type: 'application/json' });
+      const blob = new Blob([JSON.stringify(advisory)], { type: 'application/json' });
       
-      return new Promise((resolve, reject) => {
-        const uploadTask = uploadBytesResumable(advisoryRef, advisoryBlob);
-
-        uploadTask.on(
-          "state_changed",
-          (snapshot) => {
-            const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-            setUploadProgress(progress);
-          },
-          (error) => {
-            setIsUploading(false);
-            setError(`Upload failed: ${error.message}`);
-            reject(false);
-          },
-          async () => {
-            try {
-              await getDownloadURL(uploadTask.snapshot.ref);
-              setIsUploading(false);
-              setUploadProgress(0);
-              resolve(true);
-            } catch (error) {
-              setIsUploading(false);
-              setError("Failed to get download URL");
-              reject(false);
-            }
-          }
+      await new Promise<void>((resolve, reject) => {
+        const uploadTask = uploadBytesResumable(advisoryRef, blob);
+        uploadTask.on('state_changed',
+          (snapshot) => setUploadProgress((snapshot.bytesTransferred / snapshot.totalBytes) * 100),
+          (error) => reject(error),
+          () => resolve()
         );
       });
-    } catch (err) {
-      setIsUploading(false);
-      setError("Failed to start upload");
-      console.error(err);
+
+      return true;
+    } catch (error) {
+      console.error("Upload error:", error);
+      setError(`Upload failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
       return false;
+    } finally {
+      setIsUploading(false);
+      setUploadProgress(0);
     }
   };
 
@@ -121,17 +127,39 @@ const TravelAdvisories = () => {
 
     const success = await saveAdvisoryToFirebase(advisory);
     if (success) {
-      setAdvisories([...advisories, advisory]);
       setNewAdvisory({ title: "", date: "", description: "" });
+      await fetchAdvisories(); // Refresh the list
       setShowForm(false);
-      setError("");
-      setNextFolderId(prevId => prevId !== null ? prevId + 1 : 1);
+      setNextFolderId(prev => (prev || 0) + 1);
     }
   };
 
-  const handleRemoveAdvisory = (id: string) => {
-    setAdvisories(advisories.filter(advisory => advisory.id !== id));
-    // Note: This only removes from local state. You might want to also delete from Firebase Storage.
+  const handleRemoveAdvisory = async (id: string) => {
+    try {
+      const advisoriesRef = ref(storage, 'travel_advisories');
+      const result = await listAll(advisoriesRef);
+      
+      for (const folderRef of result.prefixes) {
+        try {
+          const fileRef = ref(storage, `${folderRef.fullPath}/advisory_data.json`);
+          const url = await getDownloadURL(fileRef);
+          const response = await fetch(url);
+          const advisory = await response.json();
+          
+          if (advisory.id === id) {
+            await deleteObject(fileRef);
+            setAdvisories(prev => prev.filter(a => a.id !== id));
+            return;
+          }
+        } catch (error) {
+          console.error(`Error processing folder ${folderRef.name}:`, error);
+        }
+      }
+      setError("Advisory not found");
+    } catch (error) {
+      console.error("Delete error:", error);
+      setError("Failed to delete advisory");
+    }
   };
 
   return (
@@ -140,7 +168,8 @@ const TravelAdvisories = () => {
         <h1 className="text-2xl font-bold text-gray-800">Travel Advisories</h1>
         <button 
           onClick={() => setShowForm(!showForm)}
-          className="flex items-center gap-1 bg-blue-600 text-white px-3 py-1 rounded-md hover:bg-blue-700"
+          disabled={isUploading}
+          className="flex items-center gap-1 bg-blue-600 text-white px-3 py-1 rounded-md hover:bg-blue-700 disabled:bg-gray-400"
         >
           <MdAdd size={18} />
           Add Advisory
@@ -214,11 +243,17 @@ const TravelAdvisories = () => {
         </div>
       )}
 
-      <div className="space-y-4">
-        {advisories.length === 0 ? (
-          <p className="text-gray-500 text-center py-4">No advisories available</p>
-        ) : (
-          advisories.map((advisory) => (
+      {isLoading ? (
+        <div className="text-center py-4">
+          <p className="text-gray-500">Loading advisories...</p>
+        </div>
+      ) : advisories.length === 0 ? (
+        <div className="text-center py-4">
+          <p className="text-gray-500">No advisories available</p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {advisories.map((advisory) => (
             <div key={advisory.id} className="border-b border-gray-300 pb-4 last:border-b-0">
               <div className="flex justify-between items-start">
                 <div>
@@ -236,9 +271,9 @@ const TravelAdvisories = () => {
                 </button>
               </div>
             </div>
-          ))
-        )}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 };

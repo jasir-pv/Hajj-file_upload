@@ -60,7 +60,7 @@ export default function Home() {
             Upcoming Events
           </button>
           <button
-            onClick={() => setActiveTab("travel-advisory")}
+            onClick={() => setActiveTab("travel-advisories")}
             className={`px-2 py-1 rounded-md text-xs ${
               activeTab === "travel-advisory"
                 ? "bg-blue-600 text-white"
