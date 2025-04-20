@@ -150,7 +150,7 @@ const FileUpload = () => {
         const selectedFiles = Array.from(e.target.files);
         setOtherFiles([...otherFiles, ...selectedFiles]);
       }
-    };
+    };      
   
     const handleAudioChange = (e: React.ChangeEvent<HTMLInputElement>) => {
       setError("");
@@ -263,7 +263,7 @@ const FileUpload = () => {
     };
   
     const handleUpload = async () => {
-      if (imageFiles.length === 0 && otherFiles.length === 0 && audioFiles.length === 0 && 
+      if ( otherFiles.length === 0 && audioFiles.length === 0 && 
           !contentImageFile && !name.trim() && description.every(d => !d.trim()) && 
           paragraphs.every(p => !p.title.trim() && p.description.every(d => !d.trim()))) {
         setError("Please select files or enter content to upload");
@@ -552,6 +552,7 @@ const FileUpload = () => {
               onChange={(e) => setName(e.target.value)}
               className="w-full p-2 border rounded text-gray-700 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               placeholder="Enter a name..."
+              required
             />
           </div>
           
@@ -777,7 +778,7 @@ const FileUpload = () => {
 
         <button
           onClick={handleUpload}
-          disabled={(imageFiles.length === 0 && otherFiles.length === 0 && audioFiles.length === 0)}
+          disabled={!contentImageFile}
           className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
         >
           Upload Content

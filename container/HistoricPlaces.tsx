@@ -297,7 +297,7 @@ const HistoricPlaces = () => {
             const timestamp = new Date().getTime();
             const cleanFileName = `content_image_${timestamp}.${fileExtension}`.toLowerCase();
         
-      const storagePath = `historic_places/${activeTab}/${currentFolderId}/${cleanFileName}`;
+      const storagePath = `historic_places_${activeTab}/${currentFolderId}/${cleanFileName}`;
       const storageRef = ref(storage, storagePath);
       
       try {
