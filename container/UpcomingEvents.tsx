@@ -12,6 +12,7 @@ type Event = {
   title: string;
   date: string;
   description: string;
+  url: string;
 };
 
 const UpcomingEvents = () => {
@@ -19,7 +20,8 @@ const UpcomingEvents = () => {
   const [newEvent, setNewEvent] = useState({
     title: "",
     date: "",
-    description: ""
+    description: "",
+    url: ""
   });
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState("");
@@ -122,7 +124,7 @@ const UpcomingEvents = () => {
               setIsUploading(false);
               setUploadProgress(0);
               resolve(true);
-            } catch (error) {
+            } catch {
               setIsUploading(false);
               setError("Failed to get download URL");
               reject(false);
@@ -180,10 +182,9 @@ const UpcomingEvents = () => {
 
     const success = await saveEventToFirebase(event);
     if (success) {
-
         console.log("Event saved successfully, refreshing list...");
       await fetchEvents(); // Refresh the list from Firebase
-      setNewEvent({ title: "", date: "", description: "" });
+      setNewEvent({ title: "", date: "", description: "", url: "" });
       setShowForm(false);
       setError("");
       setNextFolderId(prevId => prevId !== null ? prevId + 1 : 1);
@@ -239,6 +240,13 @@ const UpcomingEvents = () => {
               value={newEvent.description}
               onChange={(e) => setNewEvent({...newEvent, description: e.target.value})}
               placeholder="Description/Location"
+              className="w-full p-2 border rounded text-gray-700"
+            />
+            <input
+              type="text"
+              value={newEvent.url}
+              onChange={(e) => setNewEvent({...newEvent, url: e.target.value})}
+              placeholder="URL"
               className="w-full p-2 border rounded text-gray-700"
             />
           </div>
