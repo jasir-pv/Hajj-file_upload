@@ -1,4 +1,3 @@
-
 "use client";
   
 import { useState, useEffect } from "react";
@@ -21,6 +20,7 @@ interface ContentData {
   description: string[];
   paragraphs: ParagraphItem[];
   content_image?: string;
+  location_link: string;
   category: "makkah" | "madina";
 }
 
@@ -43,6 +43,7 @@ const HistoricPlaces = () => {
     const [contentImagePreview, setContentImagePreview] = useState<string | null>(null);
     const [makkahFolderId, setMakkahFolderId] = useState<number | null>(null);
     const [madinaFolderId, setMadinaFolderId] = useState<number | null>(null);
+    const [locationLink, setLocationLink] = useState("");
   
     const getCurrentFolderId = () => {
       switch (activeTab) {
@@ -345,6 +346,7 @@ const HistoricPlaces = () => {
                     description: cleanDescription,
                     paragraphs: cleanParagraphs,
                     category: activeTab,
+                    location_link: locationLink,
                   };
                   
                   if (contentImageUrl) {
@@ -444,6 +446,7 @@ const HistoricPlaces = () => {
             setOtherFiles([]);
             setAudioFiles([]);
             setPreviewUrls([]);
+            setLocationLink("");
             removeContentImage();
             setProgress(0);
           };
@@ -532,6 +535,17 @@ const HistoricPlaces = () => {
                           onChange={(e) => setName(e.target.value)}
                           className="w-full p-2 border rounded text-gray-700 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                           placeholder="Enter a name..."
+                        />
+                      </div>
+                      
+                      <div className="mb-4">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Location Link</label>
+                        <input
+                          type="text"
+                          value={locationLink}
+                          onChange={(e) => setLocationLink(e.target.value)}
+                          className="w-full p-2 border rounded text-gray-700 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          placeholder="Enter Google Maps or location URL..."
                         />
                       </div>
                       
