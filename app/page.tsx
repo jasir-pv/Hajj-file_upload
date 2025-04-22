@@ -62,7 +62,7 @@ export default function Home() {
           <button
             onClick={() => setActiveTab("travel-advisories")}
             className={`px-2 py-1 rounded-md text-xs ${
-              activeTab === "travel-advisory"
+              activeTab === "travel-advisories"
                 ? "bg-blue-600 text-white"
                 : "bg-gray-200 text-gray-700"
             }`}
