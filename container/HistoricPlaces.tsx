@@ -394,7 +394,7 @@ const HistoricPlaces = () => {
                 const timestamp = new Date().getTime() + filesToUpload.indexOf({file, type});
                 const cleanFileName = `${type}_${timestamp}.${fileExtension}`.toLowerCase();
                 
-                const storagePath = `${activeTab}/${currentFolderId}/${cleanFileName}`;
+                const storagePath = `historic_places_${activeTab}/${currentFolderId}/${cleanFileName}`;
                 const storageRef = ref(storage, storagePath);
                 
                 const uploadTask = uploadBytesResumable(storageRef, file);
