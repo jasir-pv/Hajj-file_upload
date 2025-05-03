@@ -12,7 +12,7 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-gray-100 py-8 px-4">
-      <div className="max-w-md mx-auto bg-white rounded-lg shadow-md p-6">
+      <div className="max-w-xl mx-auto bg-white rounded-lg shadow-md p-6">
         {/* Navigation Buttons */}
         <div className="flex flex-wrap gap-2 mb-6">
          
