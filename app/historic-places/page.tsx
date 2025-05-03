@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   ref,
@@ -33,7 +33,7 @@ interface ContentData {
   audios: string[];
 }
 
-const HistoricPlacesEditPage = () => {
+const HistoricPlacesEditContent = () => {
   const searchParams = useSearchParams();
   const collectionName = searchParams.get("collection");
   const id = searchParams.get("id");
@@ -925,6 +925,14 @@ const HistoricPlacesEditPage = () => {
         </div>
       </div>
     </main>
+  );
+};
+
+const HistoricPlacesEditPage = () => {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <HistoricPlacesEditContent />
+    </Suspense>
   );
 };
 

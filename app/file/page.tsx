@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   ref,
@@ -33,7 +33,7 @@ interface ContentData {
   audios: string[];
 }
 
-const FileEditPage = () => {
+const FileEditContent = () => {
   const searchParams = useSearchParams();
   const collectionName = searchParams.get("collection");
   const id = searchParams.get("id");
@@ -913,6 +913,14 @@ const FileEditPage = () => {
         </div>
       </div>
     </main>
+  );
+};
+
+const FileEditPage = () => {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <FileEditContent />
+    </Suspense>
   );
 };
 
