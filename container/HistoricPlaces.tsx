@@ -85,7 +85,7 @@ const HistoricPlaces = () => {
     
     const fetchFolderIdForCategory = async (category: TabType) => {
       try {
-        const categoryRef = ref(storage, `historic_places/${category}`);
+        const categoryRef = ref(storage, `historic_places_${category}`);
         const result = await listAll(categoryRef);
         
         const folderIds = result.prefixes.map(folderRef => {
