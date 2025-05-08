@@ -235,7 +235,7 @@ const TravelAdvisories = () => {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
                 <input
-                  type="text"
+                  type="date"
                   value={isEditing ? editingAdvisory?.date || "" : newAdvisory.date}
                   onChange={(e) => isEditing 
                     ? setEditingAdvisory({...editingAdvisory!, date: e.target.value})

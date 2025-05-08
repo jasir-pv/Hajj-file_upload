@@ -383,7 +383,7 @@ const LiveUpdates = () => {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
                 <input
-                  type="text"
+                  type="date"
                   value={isEditing ? editingUpdate?.date || "" : newUpdate.date}
                   onChange={(e) => isEditing 
                     ? setEditingUpdate({...editingUpdate!, date: e.target.value})
