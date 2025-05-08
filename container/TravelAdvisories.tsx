@@ -13,6 +13,7 @@ type AdvisoryItem = {
   date: string;
   description: string;
   timestamp: string;
+  folderId: number;
 };
 
 const TravelAdvisories = () => {
@@ -27,6 +28,13 @@ const TravelAdvisories = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [showList, setShowList] = useState(false);
+  const [currentFolderId, setCurrentFolderId] = useState<number>(1);
+
+  const cancelEdit = () => {
+    setEditingAdvisory(null);
+    setIsEditing(false);
+    setError("");
+  };
 
   useEffect(() => {
     signInAnonymousUser().catch(() => {
@@ -50,12 +58,13 @@ const TravelAdvisories = () => {
           title: data.title,
           date: data.date,
           description: data.description,
-          timestamp: data.timestamp
+          timestamp: data.timestamp,
+          folderId: data.folderId || (allAdvisories.length + 1) // Fallback to length if not set
         });
       });
       
-      // Sort advisories by timestamp (newest first)
-      allAdvisories.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+      // Sort advisories by folderId (ascending)
+      allAdvisories.sort((a, b) => a.folderId - b.folderId);
       setAdvisories(allAdvisories);
     } catch (err) {
       console.error("Error fetching advisories:", err);
@@ -65,6 +74,12 @@ const TravelAdvisories = () => {
     }
   };
 
+  const getNextFolderId = () => {
+    if (advisories.length === 0) return 1;
+    const maxId = Math.max(...advisories.map(adv => adv.folderId));
+    return maxId + 1;
+  };
+
   const handleAddAdvisory = async () => {
     if (!newAdvisory.title || !newAdvisory.date || !newAdvisory.description) {
       setError("Please fill all fields");
@@ -72,19 +87,26 @@ const TravelAdvisories = () => {
     }
 
     try {
-      // Create advisory data for Firestore
+      // Get the next folder ID (sequential)
+      const nextFolderId = advisories.length > 0 
+        ? Math.max(...advisories.map(a => a.folderId)) + 1 
+        : 1;
+  
+      // Create advisory data
       const advisoryData = {
         title: newAdvisory.title,
         date: newAdvisory.date,
         description: newAdvisory.description,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        folderId: nextFolderId  // Using sequential ID
       };
-
-      // Add to Firestore
-      const newDocRef = doc(collection(firestore, 'travel_advisories'));
-      await setDoc(newDocRef, advisoryData);
-
-      // Refresh the advisories list
+  
+      // Create document with folderId as the document ID
+      const contentRef = doc(collection(firestore, 'travel_advisories'), `${nextFolderId}`);
+      console.log(`${nextFolderId}`)
+      await setDoc(contentRef, advisoryData);
+  
+      // Refresh data
       await fetchAllAdvisories();
       
       // Reset form
@@ -115,12 +137,13 @@ const TravelAdvisories = () => {
     }
 
     try {
-      // Update data for Firestore
+      // Update data for Firestore (keeping the original folderId)
       const advisoryData = {
         title: editingAdvisory.title,
         date: editingAdvisory.date,
         description: editingAdvisory.description,
-        timestamp: editingAdvisory.timestamp // Keep original timestamp
+        timestamp: editingAdvisory.timestamp, // Keep original timestamp
+        folderId: editingAdvisory.folderId // Keep original folderId
       };
 
       // Update in Firestore
@@ -135,12 +158,6 @@ const TravelAdvisories = () => {
       console.error("Error updating advisory:", error);
       setError("Failed to update advisory");
     }
-  };
-
-  const cancelEdit = () => {
-    setEditingAdvisory(null);
-    setIsEditing(false);
-    setError("");
   };
 
   const handleDeleteAdvisory = async (id: string) => {
@@ -204,6 +221,7 @@ const TravelAdvisories = () => {
                   <div className='mt-3'>
                     <h3 className="font-medium text-lg text-gray-800">{advisory.title}</h3>
                     <p className="text-sm text-gray-500 mb-2">{advisory.date}</p>
+                    <p className="text-sm text-gray-600 mb-1">Folder ID: {advisory.folderId}</p>
                     <p className="text-gray-700 whitespace-pre-line">{advisory.description}</p>
                   </div>
                 </div>
@@ -241,7 +259,6 @@ const TravelAdvisories = () => {
                     ? setEditingAdvisory({...editingAdvisory!, date: e.target.value})
                     : setNewAdvisory({...newAdvisory, date: e.target.value})}
                   className="w-full p-2 border rounded text-gray-700 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="e.g., May 15, 2024"
                 />
               </div>
 
@@ -256,6 +273,12 @@ const TravelAdvisories = () => {
                   placeholder="Enter description..."
                 />
               </div>
+
+              {isEditing && (
+                <div className="p-2 bg-gray-50 rounded">
+                  <p className="text-sm text-gray-600">Folder ID: {editingAdvisory?.folderId}</p>
+                </div>
+              )}
 
               {isEditing ? (
                 <div className="flex space-x-2">
