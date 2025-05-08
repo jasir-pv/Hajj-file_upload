@@ -15,8 +15,9 @@ type UpdateItem = {
   title: string;
   date: string;
   description: string;
-  imageUrl?: string;
+  imageUrl: string;
   timestamp: string;
+  folderId: number; // Added folderId
 };
 
 const LiveUpdates = () => {
@@ -52,6 +53,11 @@ const LiveUpdates = () => {
     };
   }, [previewUrl, editingPreviewUrl]);
 
+  const getNextFolderId = () => {
+    if (updates.length === 0) return 1;
+    return Math.max(...updates.map(update => update.folderId)) + 1;
+  };
+
   const fetchAllUpdates = async () => {
     setIsLoading(true);
     try {
@@ -68,12 +74,13 @@ const LiveUpdates = () => {
           date: data.date,
           description: data.description,
           imageUrl: data.imageUrl,
-          timestamp: data.timestamp
+          timestamp: data.timestamp,
+          folderId: data.folderId || 1 // Default to 1 if not set
         });
       });
       
-      // Sort updates by timestamp (newest first)
-      allUpdates.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+      // Sort updates by folderId (ascending)
+      allUpdates.sort((a, b) => a.folderId - b.folderId);
       setUpdates(allUpdates);
     } catch (err) {
       console.error("Error fetching updates:", err);
@@ -151,7 +158,7 @@ const LiveUpdates = () => {
   };
 
   const handleAddUpdate = async () => {
-    if (!newUpdate.title || !newUpdate.date || !newUpdate.description) {
+    if (!newUpdate.title || !newUpdate.date || !newUpdate.description ) {
       setError("Please fill all fields");
       return;
     }
@@ -166,18 +173,21 @@ const LiveUpdates = () => {
         }
       }
 
+      const folderId = getNextFolderId();
+      
       // Create update data for Firestore
       const updateData = {
         title: newUpdate.title,
         date: newUpdate.date,
         description: newUpdate.description,
         imageUrl: imageUrl || null,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        folderId: folderId
       };
 
-      // Add to Firestore
-      const newDocRef = doc(collection(firestore, 'live_updates'));
-      await setDoc(newDocRef, updateData);
+      // Add to Firestore with folderId as document ID
+      const contentRef = doc(collection(firestore, 'live_updates'), `${folderId}`);
+      await setDoc(contentRef, updateData);
 
       // Refresh the updates list
       await fetchAllUpdates();
@@ -201,8 +211,9 @@ const LiveUpdates = () => {
     setEditingUpdate(update);
     setIsEditing(true);
     setEditingPreviewUrl(update.imageUrl || null);
-    setShowList(false); // Add this line to show the form when editing
+    setShowList(false);
   };
+
   const handleUpdateEdit = async () => {
     if (!editingUpdate || !editingUpdate.id) return;
     
@@ -234,22 +245,24 @@ const LiveUpdates = () => {
         }
       }
 
-      // Update data for Firestore
+
       const updateData = {
         title: editingUpdate.title,
         date: editingUpdate.date,
         description: editingUpdate.description,
         imageUrl: imageUrl || null,
-        timestamp: editingUpdate.timestamp // Keep original timestamp
+        timestamp: editingUpdate.timestamp, 
+        folderId: editingUpdate.folderId   
       };
 
-      // Update in Firestore
-      await updateDoc(doc(firestore, 'live_updates', editingUpdate.id), updateData);
 
-      // Refresh the updates list
+      const contentRef = doc(firestore, 'live_updates', `${editingUpdate.folderId}`);
+      await updateDoc(contentRef, updateData);
+
+
       await fetchAllUpdates();
       
-      // Reset editing state
+
       cancelEdit();
     } catch (error) {
       console.error("Error updating update:", error);
@@ -263,11 +276,9 @@ const LiveUpdates = () => {
     setEditingImageFile(null);
     setEditingPreviewUrl(null);
     setError("");
-    // Optionally, you could set showList back to true here if you want
-    // setShowList(true);
   };
 
-  const handleDeleteUpdate = async (id: string, imageUrl?: string) => {
+  const handleDeleteUpdate = async (id: string, imageUrl?: string, folderId?: number) => {
     if (!window.confirm("Are you sure you want to delete this update?")) return;
 
     try {
@@ -281,8 +292,12 @@ const LiveUpdates = () => {
         }
       }
 
-      // Delete document from Firestore
-      await deleteDoc(doc(firestore, 'live_updates', id));
+      // Delete document from Firestore using folderId
+      if (folderId) {
+        await deleteDoc(doc(firestore, 'live_updates', `${folderId}`));
+      } else {
+        await deleteDoc(doc(firestore, 'live_updates', id));
+      }
       
       // Update local state
       setUpdates(updates.filter(update => update.id !== id));
@@ -327,7 +342,7 @@ const LiveUpdates = () => {
                       <MdEdit size={20} className=' ' />
                     </button>
                     <button
-                      onClick={() => handleDeleteUpdate(update.id, update.imageUrl)}
+                      onClick={() => handleDeleteUpdate(update.id, update.imageUrl, update.folderId)}
                       className="text-red-500 hover:text-red-700"
                       aria-label="Delete update"
                     >
@@ -349,9 +364,10 @@ const LiveUpdates = () => {
                     )}
 
                     <div className='mt-3 ml-3'>
-                    <h3 className="font-medium text-lg text-gray-800">{update.title}</h3>
-                    <p className="text-sm text-gray-500 mb-2">{update.date}</p>
-                    <p className="text-gray-700 whitespace-pre-line">{update.description}</p>
+                      <h3 className="font-medium text-lg text-gray-800">{update.title}</h3>
+                      <p className="text-sm text-gray-500 mb-2">{update.date}</p>
+                      <p className="text-xs text-gray-400 mb-1">Folder ID: {update.folderId}</p>
+                      <p className="text-gray-700 whitespace-pre-line">{update.description}</p>
                     </div>
                   </div>
                 </div>
@@ -476,7 +492,7 @@ const LiveUpdates = () => {
                 <div className="flex space-x-2">
                   <button
                     onClick={handleUpdateEdit}
-                    disabled={isUploading || !editingUpdate?.title || !editingUpdate?.date || !editingUpdate?.description}
+                    disabled={isUploading || !editingUpdate?.title || !editingUpdate?.date || !editingUpdate?.description || (!editingUpdate?.imageUrl && !editingImageFile) }
                     className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
                   >
                     {isUploading ? "Uploading..." : "Update"}
@@ -491,7 +507,7 @@ const LiveUpdates = () => {
               ) : (
                 <button
                   onClick={handleAddUpdate}
-                  disabled={isUploading || !newUpdate.title || !newUpdate.date || !newUpdate.description}
+                  disabled={isUploading || !newUpdate.title || !newUpdate.date || !newUpdate.description  || !imageFile }
                   className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
                 >
                   {isUploading ? "Uploading..." : "Add Update"}
