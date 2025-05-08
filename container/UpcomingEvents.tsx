@@ -14,6 +14,7 @@ type Event = {
   description: string;
   url: string;
   timestamp: string;
+  folderId: number; // Added folderId
 };
 
 const UpcomingEvents = () => {
@@ -29,6 +30,7 @@ const UpcomingEvents = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [showList, setShowList] = useState(true);
+  const [currentFolderId, setCurrentFolderId] = useState<number>(1);
 
   useEffect(() => {
     signInAnonymousUser().catch(() => {
@@ -36,6 +38,11 @@ const UpcomingEvents = () => {
     });
     fetchAllEvents();
   }, []);
+
+  const getNextFolderId = () => {
+    if (events.length === 0) return 1;
+    return Math.max(...events.map(event => event.folderId)) + 1;
+  };
 
   const fetchAllEvents = async () => {
     setIsLoading(true);
@@ -53,13 +60,19 @@ const UpcomingEvents = () => {
           date: data.date,
           description: data.description,
           url: data.url,
-          timestamp: data.timestamp
+          timestamp: data.timestamp,
+          folderId: data.folderId || 1 // Default to 1 if not set
         });
       });
       
-      // Sort events by timestamp (newest first)
-      allEvents.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+      // Sort events by folderId (ascending)
+      allEvents.sort((a, b) => a.folderId - b.folderId);
       setEvents(allEvents);
+
+      // Set next folder ID
+      if (allEvents.length > 0) {
+        setCurrentFolderId(Math.max(...allEvents.map(e => e.folderId)) + 1);
+      }
     } catch (err) {
       console.error("Error fetching events:", err);
       setError("Failed to load events");
@@ -75,18 +88,21 @@ const UpcomingEvents = () => {
     }
 
     try {
+      const folderId = getNextFolderId();
+      
       // Create event data for Firestore
       const eventData = {
         title: newEvent.title,
         date: newEvent.date,
         description: newEvent.description,
         url: newEvent.url,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        folderId: folderId
       };
 
-      // Add to Firestore
-      const newDocRef = doc(collection(firestore, 'upcoming_events'));
-      await setDoc(newDocRef, eventData);
+      // Add to Firestore with folderId as document ID
+      const contentRef = doc(collection(firestore, 'upcoming_events'), `${folderId}`);
+      await setDoc(contentRef, eventData);
 
       // Refresh the events list
       await fetchAllEvents();
@@ -120,17 +136,19 @@ const UpcomingEvents = () => {
     }
 
     try {
-      // Update data for Firestore
+      // Update data for Firestore (maintaining original folderId)
       const eventData = {
         title: editingEvent.title,
         date: editingEvent.date,
         description: editingEvent.description,
         url: editingEvent.url,
-        timestamp: editingEvent.timestamp // Keep original timestamp
+        timestamp: editingEvent.timestamp,
+        folderId: editingEvent.folderId
       };
 
-      // Update in Firestore
-      await updateDoc(doc(firestore, 'upcoming_events', editingEvent.id), eventData);
+      // Update in Firestore using folderId as document ID
+      const contentRef = doc(firestore, 'upcoming_events', `${editingEvent.folderId}`);
+      await updateDoc(contentRef, eventData);
 
       // Refresh the events list
       await fetchAllEvents();
@@ -210,19 +228,11 @@ const UpcomingEvents = () => {
                   <div className='mt-3'>
                     <h3 className="font-medium text-lg text-gray-800">{event.title}</h3>
                     <p className="text-sm text-gray-500 mb-2">{event.date}</p>
+                    <p className="text-xs text-gray-400 mb-1">Folder ID: {event.folderId}</p>
                     {event.description && (
                       <p className="text-gray-700 mb-2">{event.description}</p>
                     )}
-                    {event.url && (
-                      <a 
-                        href={event.url} 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="text-blue-600 hover:underline text-sm"
-                      >
-                        More Info
-                      </a>
-                    )}
+                   <p className='text-sm text-blue-800 mb-1'>{event.url}</p>
                   </div>
                 </div>
               ))}
