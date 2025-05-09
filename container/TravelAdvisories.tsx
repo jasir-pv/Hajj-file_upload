@@ -1,277 +1,318 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { MdClose, MdAdd } from 'react-icons/md';
-import { ref, uploadBytesResumable, getDownloadURL, getStorage, listAll, deleteObject } from "firebase/storage";
+import { MdAdd, MdDelete, MdList, MdEdit } from 'react-icons/md';
+import { getFirestore, collection, doc, setDoc, getDocs, deleteDoc, updateDoc } from "firebase/firestore";
 import { signInAnonymousUser } from "../utils/firebase";
 
-const storage = getStorage();
+const firestore = getFirestore();
 
-type Advisory = {
+type AdvisoryItem = {
   id: string;
   title: string;
   date: string;
   description: string;
+  timestamp: string;
+  folderId: number;
 };
 
 const TravelAdvisories = () => {
-  const [advisories, setAdvisories] = useState<Advisory[]>([]);
+  const [advisories, setAdvisories] = useState<AdvisoryItem[]>([]);
   const [newAdvisory, setNewAdvisory] = useState({
     title: "",
     date: "",
     description: ""
   });
-  const [showForm, setShowForm] = useState(false);
+  const [editingAdvisory, setEditingAdvisory] = useState<AdvisoryItem | null>(null);
   const [error, setError] = useState("");
-  const [nextFolderId, setNextFolderId] = useState<number | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [showList, setShowList] = useState(false);
+  const [currentFolderId, setCurrentFolderId] = useState<number>(1);
 
-  const fetchAdvisories = async () => {
+  const cancelEdit = () => {
+    setEditingAdvisory(null);
+    setIsEditing(false);
+    setError("");
+  };
+
+  useEffect(() => {
+    signInAnonymousUser().catch(() => {
+      setError("Authentication failed. Operations may not work properly.");
+    });
+    fetchAllAdvisories();
+  }, []);
+
+  const fetchAllAdvisories = async () => {
+    setIsLoading(true);
     try {
-      setIsLoading(true);
-      setError("");
-      const advisoriesRef = ref(storage, 'travel_advisories');
-      const result = await listAll(advisoriesRef);
+      const advisoriesCollection = collection(firestore, 'travel_advisories');
+      const querySnapshot = await getDocs(advisoriesCollection);
       
-      const advisoryPromises = result.prefixes.map(async (folderRef) => {
-        try {
-          const advisoryFileRef = ref(storage, `${folderRef.fullPath}/advisory_data.json`);
-          const url = await getDownloadURL(advisoryFileRef);
-          const response = await fetch(url);
-          if (!response.ok) throw new Error('Failed to fetch advisory');
-          const data = await response.json();
-          return data;
-        } catch (error) {
-          console.error(`Error loading advisory from ${folderRef.name}:`, error);
-          return null;
-        }
+      const allAdvisories: AdvisoryItem[] = [];
+      
+      querySnapshot.forEach((doc) => {
+        const data = doc.data() as AdvisoryItem;
+        allAdvisories.push({
+          id: doc.id,
+          title: data.title,
+          date: data.date,
+          description: data.description,
+          timestamp: data.timestamp,
+          folderId: data.folderId || (allAdvisories.length + 1) // Fallback to length if not set
+        });
       });
-
-      const loadedAdvisories = (await Promise.all(advisoryPromises)).filter(Boolean);
-      setAdvisories(loadedAdvisories);
-    } catch (error) {
-      console.error("Error fetching advisories:", error);
-      setError("Failed to load advisories. Please refresh the page.");
+      
+      // Sort advisories by folderId (ascending)
+      allAdvisories.sort((a, b) => a.folderId - b.folderId);
+      setAdvisories(allAdvisories);
+    } catch (err) {
+      console.error("Error fetching advisories:", err);
+      setError("Failed to load advisories");
     } finally {
       setIsLoading(false);
     }
   };
 
-  useEffect(() => {
-    const initialize = async () => {
-      try {
-        await signInAnonymousUser();
-        await fetchAdvisories();
-        
-        // Get next folder ID
-        const advisoriesRef = ref(storage, 'travel_advisories');
-        const result = await listAll(advisoriesRef);
-        const folderIds = result.prefixes.map(folderRef => {
-          const id = parseInt(folderRef.name, 10);
-          return isNaN(id) ? 0 : id;
-        });
-        setNextFolderId(folderIds.length > 0 ? Math.max(...folderIds) + 1 : 1);
-      } catch (error) {
-        console.error("Initialization error:", error);
-        setError("Initialization failed. Please refresh the page.");
-      }
-    };
-
-    initialize();
-  }, []);
-
-  const saveAdvisoryToFirebase = async (advisory: Advisory) => {
-    if (!nextFolderId) {
-      setError("System not ready. Please try again.");
-      return false;
-    }
-
-    try {
-      setIsUploading(true);
-      setError("");
-      const advisoryRef = ref(storage, `travel_advisories/${nextFolderId}/advisory_data.json`);
-      const blob = new Blob([JSON.stringify(advisory)], { type: 'application/json' });
-      
-      await new Promise<void>((resolve, reject) => {
-        const uploadTask = uploadBytesResumable(advisoryRef, blob);
-        uploadTask.on('state_changed',
-          (snapshot) => setUploadProgress((snapshot.bytesTransferred / snapshot.totalBytes) * 100),
-          (error) => reject(error),
-          () => resolve()
-        );
-      });
-
-      return true;
-    } catch (error) {
-      console.error("Upload error:", error);
-      setError(`Upload failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      return false;
-    } finally {
-      setIsUploading(false);
-      setUploadProgress(0);
-    }
+  const getNextFolderId = () => {
+    if (advisories.length === 0) return 1;
+    const maxId = Math.max(...advisories.map(adv => adv.folderId));
+    return maxId + 1;
   };
 
   const handleAddAdvisory = async () => {
-    if (!newAdvisory.title || !newAdvisory.description) {
-      setError("Title and description are required");
+    if (!newAdvisory.title || !newAdvisory.date || !newAdvisory.description) {
+      setError("Please fill all fields");
       return;
     }
 
-    const advisory: Advisory = {
-      id: Date.now().toString(),
-      ...newAdvisory
-    };
-
-    const success = await saveAdvisoryToFirebase(advisory);
-    if (success) {
-      setNewAdvisory({ title: "", date: "", description: "" });
-      await fetchAdvisories(); // Refresh the list
-      setShowForm(false);
-      setNextFolderId(prev => (prev || 0) + 1);
+    try {
+      // Get the next folder ID (sequential)
+      const nextFolderId = advisories.length > 0 
+        ? Math.max(...advisories.map(a => a.folderId)) + 1 
+        : 1;
+  
+      // Create advisory data
+      const advisoryData = {
+        title: newAdvisory.title,
+        date: newAdvisory.date,
+        description: newAdvisory.description,
+        timestamp: new Date().toISOString(),
+        folderId: nextFolderId  // Using sequential ID
+      };
+  
+      // Create document with folderId as the document ID
+      const contentRef = doc(collection(firestore, 'travel_advisories'), `${nextFolderId}`);
+      console.log(`${nextFolderId}`)
+      await setDoc(contentRef, advisoryData);
+  
+      // Refresh data
+      await fetchAllAdvisories();
+      
+      // Reset form
+      setNewAdvisory({
+        title: "",
+        date: "",
+        description: ""
+      });
+      setError("");
+    } catch (error) {
+      console.error("Error adding advisory:", error);
+      setError("Failed to add advisory");
     }
   };
 
-  const handleRemoveAdvisory = async (id: string) => {
+  const handleEditAdvisory = (advisory: AdvisoryItem) => {
+    setEditingAdvisory(advisory);
+    setIsEditing(true);
+    setShowList(false);
+  };
+
+  const handleUpdateAdvisory = async () => {
+    if (!editingAdvisory || !editingAdvisory.id) return;
+    
+    if (!editingAdvisory.title || !editingAdvisory.date || !editingAdvisory.description) {
+      setError("Please fill all fields");
+      return;
+    }
+
     try {
-      const advisoriesRef = ref(storage, 'travel_advisories');
-      const result = await listAll(advisoriesRef);
+      // Update data for Firestore (keeping the original folderId)
+      const advisoryData = {
+        title: editingAdvisory.title,
+        date: editingAdvisory.date,
+        description: editingAdvisory.description,
+        timestamp: editingAdvisory.timestamp, // Keep original timestamp
+        folderId: editingAdvisory.folderId // Keep original folderId
+      };
+
+      // Update in Firestore
+      await updateDoc(doc(firestore, 'travel_advisories', editingAdvisory.id), advisoryData);
+
+      // Refresh the advisories list
+      await fetchAllAdvisories();
       
-      for (const folderRef of result.prefixes) {
-        try {
-          const fileRef = ref(storage, `${folderRef.fullPath}/advisory_data.json`);
-          const url = await getDownloadURL(fileRef);
-          const response = await fetch(url);
-          const advisory = await response.json();
-          
-          if (advisory.id === id) {
-            await deleteObject(fileRef);
-            setAdvisories(prev => prev.filter(a => a.id !== id));
-            return;
-          }
-        } catch (error) {
-          console.error(`Error processing folder ${folderRef.name}:`, error);
-        }
-      }
-      setError("Advisory not found");
+      // Reset editing state
+      cancelEdit();
     } catch (error) {
-      console.error("Delete error:", error);
+      console.error("Error updating advisory:", error);
+      setError("Failed to update advisory");
+    }
+  };
+
+  const handleDeleteAdvisory = async (id: string) => {
+    if (!window.confirm("Are you sure you want to delete this advisory?")) return;
+
+    try {
+      // Delete document from Firestore
+      await deleteDoc(doc(firestore, 'travel_advisories', id));
+      
+      // Update local state
+      setAdvisories(advisories.filter(advisory => advisory.id !== id));
+    } catch (error) {
+      console.error("Error deleting advisory:", error);
       setError("Failed to delete advisory");
     }
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
+    <div>
+      <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold text-gray-800">Travel Advisories</h1>
-        <button 
-          onClick={() => setShowForm(!showForm)}
-          disabled={isUploading}
-          className="flex items-center gap-1 bg-blue-600 text-white px-3 py-1 rounded-md hover:bg-blue-700 disabled:bg-gray-400"
+        <button
+          onClick={() => setShowList(!showList)}
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
         >
-          <MdAdd size={18} />
-          Add Advisory
+          <MdList size={20} />
+          {showList ? "Add Advisories" : "Show List"}
         </button>
       </div>
 
-      {showForm && (
-        <div className="bg-gray-50 p-4 rounded-lg space-y-3">
-          <div className="space-y-2">
-            <input
-              type="text"
-              value={newAdvisory.title}
-              onChange={(e) => setNewAdvisory({...newAdvisory, title: e.target.value})}
-              placeholder="Advisory Title"
-              className="w-full p-2 border rounded text-gray-700"
-              required
-            />
-            <input
-              type="text"
-              value={newAdvisory.date}
-              onChange={(e) => setNewAdvisory({...newAdvisory, date: e.target.value})}
-              placeholder="Date (e.g., May 12, 2024)"
-              className="w-full p-2 border rounded text-gray-700"
-            />
-            <textarea
-              value={newAdvisory.description}
-              onChange={(e) => setNewAdvisory({...newAdvisory, description: e.target.value})}
-              placeholder="Advisory details"
-              className="w-full p-2 border rounded h-24 text-gray-700"
-              required
-            />
-          </div>
-
-          {uploadProgress > 0 && (
-            <div className="pt-2">
-              <div className="flex justify-between mb-1">
-                <span className="text-sm font-medium text-blue-600">Uploading...</span>
-                <span className="text-sm font-medium text-blue-600">{uploadProgress.toFixed(1)}%</span>
-              </div>
-              <div className="h-2 bg-gray-200 rounded-full">
-                <div
-                  className="h-2 bg-blue-600 rounded-full transition-all duration-300"
-                  style={{ width: `${uploadProgress}%` }}
-                ></div>
-              </div>
+      {showList ? (
+        <div className="space-y-4">
+          <h2 className="text-xl font-semibold text-gray-800 mb-4">All Travel Advisories</h2>
+          {isLoading ? (
+            <div className="text-center py-4">
+              <p>Loading advisories...</p>
+            </div>
+          ) : advisories.length === 0 ? (
+            <p className="text-gray-500 text-center py-4">No advisories available</p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {advisories.map((advisory) => (
+                <div key={advisory.id} className="border rounded-lg p-4 hover:bg-gray-50 transition-colors relative">
+                  <div className="absolute top-2 right-2 flex space-x-2">
+                    <button
+                      onClick={() => handleEditAdvisory(advisory)}
+                      className="text-blue-500 hover:text-blue-700"
+                      aria-label="Edit advisory"
+                    >
+                      <MdEdit size={20} className=' ' />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteAdvisory(advisory.id)}
+                      className="text-red-500 hover:text-red-700"
+                      aria-label="Delete advisory"
+                    >
+                      <MdDelete size={20} />
+                    </button>
+                  </div>
+                  
+                  <div className='mt-3'>
+                    <h3 className="font-medium text-lg text-gray-800">{advisory.title}</h3>
+                    <p className="text-sm text-gray-500 mb-2">{advisory.date}</p>
+                    <p className="text-sm text-gray-600 mb-1">Folder ID: {advisory.folderId}</p>
+                    <p className="text-gray-700 whitespace-pre-line">{advisory.description}</p>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
-
-          {error && (
-            <div className="p-2 text-sm text-red-700 bg-red-100 rounded-lg">
-              {error}
-            </div>
-          )}
-
-          <div className="flex gap-2">
-            <button
-              onClick={handleAddAdvisory}
-              disabled={!newAdvisory.title || !newAdvisory.description || isUploading}
-              className="bg-green-600 text-white px-3 py-1 rounded-md hover:bg-green-700 disabled:bg-gray-400"
-            >
-              {isUploading ? "Saving..." : "Save Advisory"}
-            </button>
-            <button
-              onClick={() => setShowForm(false)}
-              className="bg-gray-500 text-white px-3 py-1 rounded-md hover:bg-gray-600"
-              disabled={isUploading}
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
-
-      {isLoading ? (
-        <div className="text-center py-4">
-          <p className="text-gray-500">Loading advisories...</p>
-        </div>
-      ) : advisories.length === 0 ? (
-        <div className="text-center py-4">
-          <p className="text-gray-500">No advisories available</p>
         </div>
       ) : (
-        <div className="space-y-4">
-          {advisories.map((advisory) => (
-            <div key={advisory.id} className="border-b border-gray-300 pb-4 last:border-b-0">
-              <div className="flex justify-between items-start">
-                <div>
-                  <h3 className="font-bold text-gray-800">{advisory.title}</h3>
-                  {advisory.date && (
-                    <p className="text-gray-600 text-sm">{advisory.date}</p>
-                  )}
-                  <p className="text-gray-700 mt-1">{advisory.description}</p>
-                </div>
-                <button
-                  onClick={() => handleRemoveAdvisory(advisory.id)}
-                  className="text-red-500 hover:text-red-700"
-                >
-                  <MdClose size={18} />
-                </button>
+        <div className="space-y-6">
+          {/* Add/Edit Advisory Form */}
+          <div className="bg-white p-5 rounded-lg shadow-sm border border-gray-200">
+            <h2 className="text-lg font-semibold text-gray-700 mb-4">
+              {isEditing ? "Edit Advisory" : "Add New Advisory"}
+            </h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
+                <input
+                  type="text"
+                  value={isEditing ? editingAdvisory?.title || "" : newAdvisory.title}
+                  onChange={(e) => isEditing 
+                    ? setEditingAdvisory({...editingAdvisory!, title: e.target.value})
+                    : setNewAdvisory({...newAdvisory, title: e.target.value})}
+                  className="w-full p-2 border rounded text-gray-700 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Enter title..."
+                />
               </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+                <input
+                  type="date"
+                  value={isEditing ? editingAdvisory?.date || "" : newAdvisory.date}
+                  onChange={(e) => isEditing 
+                    ? setEditingAdvisory({...editingAdvisory!, date: e.target.value})
+                    : setNewAdvisory({...newAdvisory, date: e.target.value})}
+                  className="w-full p-2 border rounded text-gray-700 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                <textarea
+                  value={isEditing ? editingAdvisory?.description || "" : newAdvisory.description}
+                  onChange={(e) => isEditing 
+                    ? setEditingAdvisory({...editingAdvisory!, description: e.target.value})
+                    : setNewAdvisory({...newAdvisory, description: e.target.value})}
+                  className="w-full p-2 border rounded h-24 text-gray-700 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Enter description..."
+                />
+              </div>
+
+              {isEditing && (
+                <div className="p-2 bg-gray-50 rounded">
+                  <p className="text-sm text-gray-600">Folder ID: {editingAdvisory?.folderId}</p>
+                </div>
+              )}
+
+              {isEditing ? (
+                <div className="flex space-x-2">
+                  <button
+                    onClick={handleUpdateAdvisory}
+                    disabled={!editingAdvisory?.title || !editingAdvisory?.date || !editingAdvisory?.description}
+                    className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                  >
+                    Update
+                  </button>
+                  <button
+                    onClick={cancelEdit}
+                    className="flex-1 bg-gray-500 text-white py-2 px-4 rounded-md hover:bg-gray-600 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={handleAddAdvisory}
+                  disabled={!newAdvisory.title || !newAdvisory.date || !newAdvisory.description}
+                  className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                >
+                  Add Advisory
+                </button>
+              )}
+
+              {error && (
+                <div className="p-2 text-sm text-red-700 bg-red-100 rounded-lg">
+                  {error}
+                </div>
+              )}
             </div>
-          ))}
+          </div>
         </div>
       )}
     </div>

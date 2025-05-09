@@ -1,11 +1,11 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { MdClose, MdAdd } from 'react-icons/md';
-import { ref, uploadBytesResumable, getDownloadURL, getStorage, listAll, deleteObject } from "firebase/storage";
+import { MdClose, MdAdd, MdDelete, MdList, MdEdit } from 'react-icons/md';
+import { getFirestore, collection, doc, setDoc, getDocs, deleteDoc, updateDoc } from "firebase/firestore";
 import { signInAnonymousUser } from "../utils/firebase";
 
-const storage = getStorage();
+const firestore = getFirestore();
 
 type Event = {
   id: string;
@@ -13,6 +13,8 @@ type Event = {
   date: string;
   description: string;
   url: string;
+  timestamp: string;
+  folderId: number; // Added folderId
 };
 
 const UpcomingEvents = () => {
@@ -23,147 +25,59 @@ const UpcomingEvents = () => {
     description: "",
     url: ""
   });
-  const [showForm, setShowForm] = useState(false);
+  const [editingEvent, setEditingEvent] = useState<Event | null>(null);
   const [error, setError] = useState("");
-  const [nextFolderId, setNextFolderId] = useState<number | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [showList, setShowList] = useState(true);
+  const [currentFolderId, setCurrentFolderId] = useState<number>(1);
 
   useEffect(() => {
     signInAnonymousUser().catch(() => {
-      setError("Authentication failed. Uploads may not work properly.");
+      setError("Authentication failed. Operations may not work properly.");
     });
-    fetchEvents();
+    fetchAllEvents();
   }, []);
 
-  useEffect(() => {
-    const fetchHighestFolderId = async () => {
-      try {
-        const eventsRef = ref(storage, 'upcoming_events');
-        const result = await listAll(eventsRef);
-        
-        const folderIds = result.prefixes.map(folderRef => {
-          const folderName = folderRef.name;
-          const folderId = parseInt(folderName, 10);
-          return isNaN(folderId) ? 0 : folderId;
-        });
-        
-        const highestId = folderIds.length > 0 ? Math.max(...folderIds) : 0;
-        setNextFolderId(highestId + 1);
-      } catch (error) {
-        console.error("Error fetching folder IDs:", error);
-        setNextFolderId(1);
-      }
-    };
-    
-    fetchHighestFolderId();
-  }, []);
+  const getNextFolderId = () => {
+    if (events.length === 0) return 1;
+    return Math.max(...events.map(event => event.folderId)) + 1;
+  };
 
-  const fetchEvents = async () => {
+  const fetchAllEvents = async () => {
+    setIsLoading(true);
     try {
-      setIsLoading(true);
-      const eventsRef = ref(storage, 'upcoming_events');
-      const result = await listAll(eventsRef);
+      const eventsCollection = collection(firestore, 'upcoming_events');
+      const querySnapshot = await getDocs(eventsCollection);
       
-      const eventPromises = result.prefixes.map(async (folderRef) => {
-        try {
-          const eventFileRef = ref(storage, `${folderRef.fullPath}/event_data.json`);
-          const downloadURL = await getDownloadURL(eventFileRef);
-          const response = await fetch(downloadURL);
-          return await response.json();
-        } catch (error) {
-          console.error(`Error loading event from ${folderRef.name}:`, error);
-          return null;
-        }
+      const allEvents: Event[] = [];
+      
+      querySnapshot.forEach((doc) => {
+        const data = doc.data() as Event;
+        allEvents.push({
+          id: doc.id,
+          title: data.title,
+          date: data.date,
+          description: data.description,
+          url: data.url,
+          timestamp: data.timestamp,
+          folderId: data.folderId || 1 // Default to 1 if not set
+        });
       });
+      
+      // Sort events by folderId (ascending)
+      allEvents.sort((a, b) => a.folderId - b.folderId);
+      setEvents(allEvents);
 
-      const loadedEvents = (await Promise.all(eventPromises)).filter(Boolean);
-      setEvents(loadedEvents);
-    } catch (error) {
-      console.error("Error fetching events:", error);
+      // Set next folder ID
+      if (allEvents.length > 0) {
+        setCurrentFolderId(Math.max(...allEvents.map(e => e.folderId)) + 1);
+      }
+    } catch (err) {
+      console.error("Error fetching events:", err);
       setError("Failed to load events");
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  const saveEventToFirebase = async (event: Event): Promise<boolean> => {
-    if (!storage) {
-      setError("Storage service not available");
-      return false;
-    }
-  
-    if (nextFolderId === null) {
-      setError("Preparing upload location, please try again in a moment");
-      return false;
-    }
-
-    try {
-      setIsUploading(true);
-      const eventRef = ref(storage, `upcoming_events/${nextFolderId}/event_data.json`);
-      const eventBlob = new Blob([JSON.stringify(event)], { type: 'application/json' });
-      
-      return new Promise((resolve, reject) => {
-        const uploadTask = uploadBytesResumable(eventRef, eventBlob);
-
-        uploadTask.on(
-          "state_changed",
-          (snapshot) => {
-            const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-            setUploadProgress(progress);
-          },
-          (error) => {
-            setIsUploading(false);
-            setError(`Upload failed: ${error.message}`);
-            reject(false);
-          },
-          async () => {
-            try {
-              await getDownloadURL(uploadTask.snapshot.ref);
-              setIsUploading(false);
-              setUploadProgress(0);
-              resolve(true);
-            } catch {
-              setIsUploading(false);
-              setError("Failed to get download URL");
-              reject(false);
-            }
-          }
-        );
-      });
-    } catch (err) {
-      setIsUploading(false);
-      setError("Failed to start upload");
-      console.error(err);
-      return false;
-    }
-  };
-
-  const deleteEventFromFirebase = async (id: string) => {
-    try {
-      const eventsRef = ref(storage, 'upcoming_events');
-      const result = await listAll(eventsRef);
-      
-      for (const folderRef of result.prefixes) {
-        try {
-          const eventFileRef = ref(storage, `${folderRef.fullPath}/event_data.json`);
-          const downloadURL = await getDownloadURL(eventFileRef);
-          const response = await fetch(downloadURL);
-          const event = await response.json();
-          
-          if (event.id === id) {
-            await deleteObject(eventFileRef);
-            return true;
-          }
-        } catch (error) {
-          console.error(`Error checking folder ${folderRef.name}:`, error);
-        }
-      }
-      return false;
-    } catch (error) {
-      console.error("Error deleting event:", error);
-      return false;
     }
   };
 
@@ -173,153 +87,252 @@ const UpcomingEvents = () => {
       return;
     }
 
-    const event: Event = {
-      id: Date.now().toString(),
-      ...newEvent
-    };
+    try {
+      const folderId = getNextFolderId();
+      
+      // Create event data for Firestore
+      const eventData = {
+        title: newEvent.title,
+        date: newEvent.date,
+        description: newEvent.description,
+        url: newEvent.url,
+        timestamp: new Date().toISOString(),
+        folderId: folderId
+      };
 
-    console.log("Attempting to save event:", event);
+      // Add to Firestore with folderId as document ID
+      const contentRef = doc(collection(firestore, 'upcoming_events'), `${folderId}`);
+      await setDoc(contentRef, eventData);
 
-    const success = await saveEventToFirebase(event);
-    if (success) {
-        console.log("Event saved successfully, refreshing list...");
-      await fetchEvents(); // Refresh the list from Firebase
-      setNewEvent({ title: "", date: "", description: "", url: "" });
-      setShowForm(false);
+      // Refresh the events list
+      await fetchAllEvents();
+      
+      // Reset form
+      setNewEvent({
+        title: "",
+        date: "",
+        description: "",
+        url: ""
+      });
       setError("");
-      setNextFolderId(prevId => prevId !== null ? prevId + 1 : 1);
-    }else{
-        console.log("Failed to save event");
+    } catch (error) {
+      console.error("Error adding event:", error);
+      setError("Failed to add event");
     }
   };
 
-  const handleRemoveEvent = async (id: string) => {
-    const success = await deleteEventFromFirebase(id);
-    if (success) {
+  const handleEditEvent = (event: Event) => {
+    setEditingEvent(event);
+    setIsEditing(true);
+    setShowList(false);
+  };
+
+  const handleUpdateEvent = async () => {
+    if (!editingEvent || !editingEvent.id) return;
+    
+    if (!editingEvent.title || !editingEvent.date) {
+      setError("Title and date are required");
+      return;
+    }
+
+    try {
+      // Update data for Firestore (maintaining original folderId)
+      const eventData = {
+        title: editingEvent.title,
+        date: editingEvent.date,
+        description: editingEvent.description,
+        url: editingEvent.url,
+        timestamp: editingEvent.timestamp,
+        folderId: editingEvent.folderId
+      };
+
+      // Update in Firestore using folderId as document ID
+      const contentRef = doc(firestore, 'upcoming_events', `${editingEvent.folderId}`);
+      await updateDoc(contentRef, eventData);
+
+      // Refresh the events list
+      await fetchAllEvents();
+      
+      // Reset editing state
+      cancelEdit();
+    } catch (error) {
+      console.error("Error updating event:", error);
+      setError("Failed to update event");
+    }
+  };
+
+  const cancelEdit = () => {
+    setEditingEvent(null);
+    setIsEditing(false);
+    setError("");
+  };
+
+  const handleDeleteEvent = async (id: string) => {
+    if (!window.confirm("Are you sure you want to delete this event?")) return;
+
+    try {
+      // Delete document from Firestore
+      await deleteDoc(doc(firestore, 'upcoming_events', id));
+      
+      // Update local state
       setEvents(events.filter(event => event.id !== id));
-    } else {
+    } catch (error) {
+      console.error("Error deleting event:", error);
       setError("Failed to delete event");
     }
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
+    <div>
+      <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold text-gray-800">Upcoming Events</h1>
-        <button 
-          onClick={() => setShowForm(!showForm)}
-          disabled={isUploading}
-          className="flex items-center gap-1 bg-blue-600 text-white px-3 py-1 rounded-md hover:bg-blue-700 disabled:bg-gray-400"
+        <button
+          onClick={() => setShowList(!showList)}
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
         >
-          <MdAdd size={18} />
-          Add Event
+          <MdList size={20} />
+          {showList ? "Hide List" : "Show List"}
         </button>
       </div>
 
-      {showForm && (
-        <div className="bg-gray-50 p-4 rounded-lg space-y-3">
-          <div className="space-y-2">
-            <input
-              type="text"
-              value={newEvent.title}
-              onChange={(e) => setNewEvent({...newEvent, title: e.target.value})}
-              placeholder="Event Title"
-              className="w-full p-2 border rounded text-gray-700"
-              required
-            />
-            <input
-              type="text"
-              value={newEvent.date}
-              onChange={(e) => setNewEvent({...newEvent, date: e.target.value})}
-              placeholder="Date (e.g., June 1, 2024)"
-              className="w-full p-2 border rounded text-gray-700"
-              required
-            />
-            <input
-              type="text"
-              value={newEvent.description}
-              onChange={(e) => setNewEvent({...newEvent, description: e.target.value})}
-              placeholder="Description/Location"
-              className="w-full p-2 border rounded text-gray-700"
-            />
-            <input
-              type="text"
-              value={newEvent.url}
-              onChange={(e) => setNewEvent({...newEvent, url: e.target.value})}
-              placeholder="URL"
-              className="w-full p-2 border rounded text-gray-700"
-            />
-          </div>
-
-          {uploadProgress > 0 && (
-            <div className="pt-2">
-              <div className="flex justify-between mb-1">
-                <span className="text-sm font-medium text-blue-600">Uploading...</span>
-                <span className="text-sm font-medium text-blue-600">{uploadProgress.toFixed(1)}%</span>
-              </div>
-              <div className="h-2 bg-gray-200 rounded-full">
-                <div
-                  className="h-2 bg-blue-600 rounded-full transition-all duration-300"
-                  style={{ width: `${uploadProgress}%` }}
-                ></div>
-              </div>
+      {showList ? (
+        <div className="space-y-4">
+          <h2 className="text-xl font-semibold text-gray-800 mb-4">All Upcoming Events</h2>
+          {isLoading ? (
+            <div className="text-center py-4">
+              <p>Loading events...</p>
+            </div>
+          ) : events.length === 0 ? (
+            <p className="text-gray-500 text-center py-4">No events available</p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {events.map((event) => (
+                <div key={event.id} className="border rounded-lg p-4 hover:bg-gray-50 transition-colors relative">
+                  <div className="absolute top-2 right-2 flex space-x-2">
+                    <button
+                      onClick={() => handleEditEvent(event)}
+                      className="text-blue-500 hover:text-blue-700"
+                      aria-label="Edit event"
+                    >
+                      <MdEdit size={20} />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteEvent(event.id)}
+                      className="text-red-500 hover:text-red-700"
+                      aria-label="Delete event"
+                    >
+                      <MdDelete size={20} />
+                    </button>
+                  </div>
+                  
+                  <div className='mt-3'>
+                    <h3 className="font-medium text-lg text-gray-800">{event.title}</h3>
+                    <p className="text-sm text-gray-500 mb-2">{event.date}</p>
+                    <p className="text-xs text-gray-400 mb-1">Folder ID: {event.folderId}</p>
+                    {event.description && (
+                      <p className="text-gray-700 mb-2">{event.description}</p>
+                    )}
+                   <p className='text-sm text-blue-800 mb-1'>{event.url}</p>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
-
-          {error && (
-            <div className="p-2 text-sm text-red-700 bg-red-100 rounded-lg">
-              {error}
-            </div>
-          )}
-
-          <div className="flex gap-2">
-            <button
-              onClick={handleAddEvent}
-              disabled={!newEvent.title || !newEvent.date || isUploading}
-              className="bg-green-600 text-white px-3 py-1 rounded-md hover:bg-green-700 disabled:bg-gray-400"
-            >
-              {isUploading ? "Saving..." : "Save Event"}
-            </button>
-            <button
-              onClick={() => setShowForm(false)}
-              className="bg-gray-500 text-white px-3 py-1 rounded-md hover:bg-gray-600"
-              disabled={isUploading}
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
-
-      {isLoading ? (
-        <div className="text-center py-4">
-          <p className="text-gray-500">Loading events...</p>
-        </div>
-      ) : events.length === 0 ? (
-        <div className="text-center py-4">
-          <p className="text-gray-500">No upcoming events scheduled</p>
         </div>
       ) : (
-        <div className="space-y-4">
-          {events.map((event) => (
-            <div key={event.id} className="border-l-4 border-blue-500 pl-4 py-2 bg-gray-50 rounded-r">
-              <div className="flex justify-between items-start">
-                <div>
-                  <h3 className="font-bold text-gray-800">{event.title}</h3>
-                  <p className="text-gray-600">{event.date}</p>
-                  {event.description && (
-                    <p className="text-gray-500 text-sm mt-1">{event.description}</p>
-                  )}
-                </div>
-                <button
-                  onClick={() => handleRemoveEvent(event.id)}
-                  className="text-red-500 hover:text-red-700"
-                >
-                  <MdClose size={18} />
-                </button>
+        <div className="space-y-6">
+          {/* Add/Edit Event Form */}
+          <div className="bg-white p-5 rounded-lg shadow-sm border border-gray-200">
+            <h2 className="text-lg font-semibold text-gray-700 mb-4">
+              {isEditing ? "Edit Event" : "Add New Event"}
+            </h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Title*</label>
+                <input
+                  type="text"
+                  value={isEditing ? editingEvent?.title || "" : newEvent.title}
+                  onChange={(e) => isEditing 
+                    ? setEditingEvent({...editingEvent!, title: e.target.value})
+                    : setNewEvent({...newEvent, title: e.target.value})}
+                  className="w-full p-2 border rounded text-gray-700 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Enter title..."
+                  required
+                />
               </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Date*</label>
+                <input
+                  type="date"
+                  value={isEditing ? editingEvent?.date || "" : newEvent.date}
+                  onChange={(e) => isEditing 
+                    ? setEditingEvent({...editingEvent!, date: e.target.value})
+                    : setNewEvent({...newEvent, date: e.target.value})}
+                  className="w-full p-2 border rounded text-gray-700 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="e.g., June 1, 2024"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                <textarea
+                  value={isEditing ? editingEvent?.description || "" : newEvent.description}
+                  onChange={(e) => isEditing 
+                    ? setEditingEvent({...editingEvent!, description: e.target.value})
+                    : setNewEvent({...newEvent, description: e.target.value})}
+                  className="w-full p-2 border rounded h-24 text-gray-700 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Enter description..."
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">URL</label>
+                <input
+                  type="text"
+                  value={isEditing ? editingEvent?.url || "" : newEvent.url}
+                  onChange={(e) => isEditing 
+                    ? setEditingEvent({...editingEvent!, url: e.target.value})
+                    : setNewEvent({...newEvent, url: e.target.value})}
+                  className="w-full p-2 border rounded text-gray-700 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Enter URL (optional)"
+                />
+              </div>
+
+              {error && (
+                <div className="p-2 text-sm text-red-700 bg-red-100 rounded-lg">
+                  {error}
+                </div>
+              )}
+
+              {isEditing ? (
+                <div className="flex space-x-2">
+                  <button
+                    onClick={handleUpdateEvent}
+                    disabled={!editingEvent?.title || !editingEvent?.date}
+                    className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                  >
+                    Update
+                  </button>
+                  <button
+                    onClick={cancelEdit}
+                    className="flex-1 bg-gray-500 text-white py-2 px-4 rounded-md hover:bg-gray-600 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={handleAddEvent}
+                  disabled={!newEvent.title || !newEvent.date}
+                  className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                >
+                  Add Event
+                </button>
+              )}
             </div>
-          ))}
+          </div>
         </div>
       )}
     </div>

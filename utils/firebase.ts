@@ -53,5 +53,7 @@ export const signInAnonymousUser = async (): Promise<void> => {
   }
 };
 
+
+
 export { app, storage, firestore, auth };
 export default app; 
