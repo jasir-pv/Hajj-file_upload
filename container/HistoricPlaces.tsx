@@ -46,6 +46,7 @@ const HistoricPlaces = () => {
     const [makkahFolderId, setMakkahFolderId] = useState<number | null>(null);
     const [madinaFolderId, setMadinaFolderId] = useState<number | null>(null);
     const [locationLink, setLocationLink] = useState("");
+    const [isUploading, setIsUploading] = useState(false);
 
     const getCurrentFolderId = () => {
       switch (activeTab) {
@@ -556,6 +557,11 @@ const HistoricPlaces = () => {
               {/* Upload Button */}
               <button
                 onClick={async () => {
+                  if (isUploading) {
+                    setError("An upload is already in progress");
+                    return;
+                  }
+
                   if (!storage || !firestore) {
                     setError("Firebase services not initialized");
                     return;
@@ -568,6 +574,7 @@ const HistoricPlaces = () => {
                   }
 
                   try {
+                    setIsUploading(true);
                     setProgress(0);
                     setError("");
 
@@ -605,15 +612,16 @@ const HistoricPlaces = () => {
                     const totalFiles = allFiles.length;
                     let uploadedCount = 0;
 
-                    for (const file of allFiles) {
+                    // Create an array of upload promises
+                    const uploadPromises = allFiles.map(async (file, index) => {
                       const fileExtension = file.name.split('.').pop() || '';
-                      const timestamp = new Date().getTime();
+                      const timestamp = new Date().getTime() + index;
                       const cleanFileName = `${file.type.startsWith('image/') ? 'image' : file.type.startsWith('audio/') ? 'audio' : 'file'}_${timestamp}.${fileExtension}`.toLowerCase();
-                      const storagePath = `${activeTab}/${currentFolderId}/${cleanFileName}`;
+                      const storagePath = `historic_places_${activeTab}/${currentFolderId}/${cleanFileName}`;
                       const storageRef = ref(storage, storagePath);
                       
-                      const uploadTask = uploadBytesResumable(storageRef, file);
-                      await new Promise<void>((resolve, reject) => {
+                      return new Promise<void>((resolve, reject) => {
+                        const uploadTask = uploadBytesResumable(storageRef, file);
                         uploadTask.on(
                           "state_changed",
                           (snapshot) => {
@@ -622,7 +630,6 @@ const HistoricPlaces = () => {
                             setProgress(overallProgress);
                           },
                           (error) => {
-                            setError(`Upload failed: ${error.message}`);
                             reject(error);
                           },
                           () => {
@@ -631,7 +638,10 @@ const HistoricPlaces = () => {
                           }
                         );
                       });
-                    }
+                    });
+
+                    // Wait for all uploads to complete
+                    await Promise.all(uploadPromises);
 
                     // Store content data in Firestore
                     const contentData: ContentData = {
@@ -675,12 +685,14 @@ const HistoricPlaces = () => {
                   } catch (err) {
                     console.error("Upload failed:", err);
                     setError("Upload failed. Please try again.");
+                  } finally {
+                    setIsUploading(false);
                   }
                 }}
-                disabled={progress > 0}
+                disabled={isUploading || progress > 0}
                 className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
               >
-                {progress > 0 ? "Uploading..." : "Upload Content"}
+                {isUploading ? "Uploading..." : "Upload Content"}
               </button>
             </div>
           </div>

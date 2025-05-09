@@ -58,6 +58,9 @@ const FileUpload = () => {
   const [editMode, setEditMode] = useState(false);
   const [viewMode, setViewMode] = useState<"form" | "list">("form");
 
+  // Add a new state for tracking current upload
+  const [isUploading, setIsUploading] = useState(false);
+
   // Toggle between form and list view
   const toggleViewMode = () => {
     if (viewMode === "form") {
@@ -313,6 +316,11 @@ const FileUpload = () => {
   };
 
   const handleUpload = async () => {
+    if (isUploading) {
+      setError("An upload is already in progress");
+      return;
+    }
+
     if (
       otherFiles.length === 0 &&
       audioFiles.length === 0 &&
@@ -340,6 +348,7 @@ const FileUpload = () => {
     }
 
     try {
+      setIsUploading(true);
       const filesToUpload: { file: File; type: string }[] = [];
 
       imageFiles.forEach((file) => filesToUpload.push({ file, type: "image" }));
@@ -464,62 +473,59 @@ const FileUpload = () => {
         // Increment folder ID for the NEXT upload operation
         setCurrentFolderId(currentFolderId + 1);
         resetForm();
+        setIsUploading(false);
         return;
       }
 
       let completedUploads = 0;
       const totalFiles = filesToUpload.length;
 
-      for (const { file, type } of filesToUpload) {
+      // Create an array of upload promises
+      const uploadPromises = filesToUpload.map(async ({ file, type }, index) => {
         const fileExtension = file.name.split(".").pop() || "";
-        const timestamp =
-          new Date().getTime() + filesToUpload.indexOf({ file, type });
-        const cleanFileName =
-          `${type}_${timestamp}.${fileExtension}`.toLowerCase();
-
+        const timestamp = new Date().getTime() + index;
+        const cleanFileName = `${type}_${timestamp}.${fileExtension}`.toLowerCase();
         const storagePath = `${activeTab}/${currentFolderId}/${cleanFileName}`;
         const storageRef = ref(storage, storagePath);
 
-        const uploadTask = uploadBytesResumable(storageRef, file);
+        return new Promise<void>((resolve, reject) => {
+          const uploadTask = uploadBytesResumable(storageRef, file);
 
-        uploadTask.on(
-          "state_changed",
-          (snapshot) => {
-            const fileProgress =
-              snapshot.bytesTransferred / snapshot.totalBytes;
-            const overallProgress =
-              ((completedUploads + fileProgress) / totalFiles) * 100;
-            setProgress(overallProgress);
-          },
-          (error) => {
-            setError(`Upload failed: ${error.message}`);
-            setProgress(0);
-          },
-          async () => {
-            completedUploads++;
-
-            if (completedUploads === totalFiles) {
-              alert("All uploads successful!");
-              setError("");
-              // Increment folder ID for the next upload
-              setCurrentFolderId(currentFolderId + 1);
-
-              setImageFiles([]);
-              setOtherFiles([]);
-              setAudioFiles([]);
-              setPreviewUrls([]);
-              setName("");
-              setDescription([""]);
-              setParagraphs([{ title: "", description: [""] }]);
-              removeContentImage();
-              setProgress(0);
+          uploadTask.on(
+            "state_changed",
+            (snapshot) => {
+              const fileProgress = snapshot.bytesTransferred / snapshot.totalBytes;
+              const overallProgress = ((completedUploads + fileProgress) / totalFiles) * 100;
+              setProgress(overallProgress);
+            },
+            (error) => {
+              reject(error);
+            },
+            async () => {
+              completedUploads++;
+              resolve();
             }
-          }
-        );
+          );
+        });
+      });
+
+      // Wait for all uploads to complete
+      try {
+        await Promise.all(uploadPromises);
+        alert("All uploads successful!");
+        setError("");
+        // Increment folder ID for the next upload
+        setCurrentFolderId(currentFolderId + 1);
+        resetForm();
+      } catch (error) {
+        setError(`Upload failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        setProgress(0);
       }
     } catch (err) {
       setError("Failed to start upload");
       console.error(err);
+    } finally {
+      setIsUploading(false);
     }
   };
 
