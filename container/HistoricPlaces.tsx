@@ -23,6 +23,7 @@ interface ContentData {
   content_image?: string;
   location_link: string;
   category: "makkah" | "madina";
+  order: number;
 }
 
 type TabType = "makkah" | "madina";
@@ -47,6 +48,7 @@ const HistoricPlaces = () => {
     const [madinaFolderId, setMadinaFolderId] = useState<number | null>(null);
     const [locationLink, setLocationLink] = useState("");
     const [isUploading, setIsUploading] = useState(false);
+    const [order, setOrder] = useState<number>(0);
 
     const getCurrentFolderId = () => {
       switch (activeTab) {
@@ -554,6 +556,21 @@ const HistoricPlaces = () => {
                 </div>
               )}
 
+              {/* Display Order Input */}
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Display Order
+                </label>
+                <input
+                  type="number"
+                  value={order}
+                  onChange={(e) => setOrder(parseInt(e.target.value) || 0)}
+                  min="0"
+                  className="w-full p-2 border rounded text-gray-700 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+                <p className="text-xs text-gray-500 mt-1">Lower numbers will appear first in the list</p>
+              </div>
+
               {/* Upload Button */}
               <button
                 onClick={async () => {
@@ -650,6 +667,7 @@ const HistoricPlaces = () => {
                       paragraphs: paragraphs.filter(p => p.title.trim() || p.description.some(d => d.trim())),
                       location_link: locationLink,
                       category: activeTab,
+                      order: order
                     };
 
                     if (contentImageUrl) {
@@ -679,6 +697,7 @@ const HistoricPlaces = () => {
                     setContentImagePreview(null);
                     setProgress(0);
                     setError("");
+                    setOrder(0);
 
                     // Increment folder ID for next upload
                     setCurrentFolderId(currentFolderId + 1);

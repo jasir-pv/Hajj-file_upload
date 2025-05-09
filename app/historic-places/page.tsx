@@ -31,6 +31,7 @@ interface ContentData {
   files: string[];
   images: string[];
   audios: string[];
+  order: number;
 }
 
 const HistoricPlacesEditContent = () => {
@@ -471,6 +472,21 @@ const HistoricPlacesEditContent = () => {
             onChange={(e) => setContent({ ...content, name: e.target.value })}
             className="w-full p-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
+        </div>
+
+        {/* Order */}
+        <div className="space-y-2">
+          <label className="block text-sm font-medium text-gray-700">
+            Display Order
+          </label>
+          <input
+            type="number"
+            value={content.order || 0}
+            onChange={(e) => setContent({ ...content, order: parseInt(e.target.value) || 0 })}
+            min="0"
+            className="w-full p-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+          <p className="text-xs text-gray-500">Lower numbers will appear first in the list</p>
         </div>
 
         {/* Location Link */}
