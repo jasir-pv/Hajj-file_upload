@@ -232,7 +232,7 @@ const UpcomingEvents = () => {
                     <p className="text-sm text-gray-500 mb-2">{event.date}</p>
                     <p className="text-xs text-gray-400 mb-1">Folder ID: {event.folderId}</p>
                     {event.description && (
-                      <p className="text-gray-700 mb-2">{event.description}</p>
+                      <p className="text-gray-700 mb-2 line-clamp-3">{event.description}</p>
                     )}
                    <p className='text-sm text-blue-800 mb-1'>{event.url}</p>
                   </div>

@@ -369,7 +369,7 @@ const LiveUpdates = () => {
                       <h3 className="font-medium text-lg text-gray-800">{update.title}</h3>
                       <p className="text-sm text-gray-500 mb-2">{update.date}</p>
                       <p className="text-xs text-gray-400 mb-1">Folder ID: {update.folderId}</p>
-                      <p className="text-gray-700 whitespace-pre-line">{update.description}</p>
+                      <p className="text-gray-700 whitespace-pre-line line-clamp-3">{update.description}</p>
                     </div>
                   </div>
                 </div>
