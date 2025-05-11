@@ -38,6 +38,7 @@ const LiveUpdates = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [showList, setShowList] = useState(false);
+  const [order, setOrder] = useState<number>(0);
 
   useEffect(() => {
     signInAnonymousUser().catch(() => {
@@ -252,7 +253,8 @@ const LiveUpdates = () => {
         description: editingUpdate.description,
         imageUrl: imageUrl || null,
         timestamp: editingUpdate.timestamp, 
-        folderId: editingUpdate.folderId   
+        folderId: editingUpdate.folderId,   
+        order: order
       };
 
 
@@ -409,6 +411,20 @@ const LiveUpdates = () => {
                 />
               </div>
 
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Display Order
+                </label>
+                <input
+                  type="number"
+                  value={order}
+                  onChange={(e) => setOrder(parseInt(e.target.value) || 0)}
+                  min="0"
+                  className="w-full p-2 border rounded text-gray-700 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+                <p className="text-xs text-gray-500 mt-1">Lower numbers will appear first in the list</p>
+              </div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
                 <textarea
@@ -421,7 +437,7 @@ const LiveUpdates = () => {
                 />
               </div>
 
-              {/* Image Upload Section */}
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Update Image</label>
                 <div className="flex flex-col items-center justify-center w-full p-4 border-2 border-dotted border-gray-400 rounded-lg">

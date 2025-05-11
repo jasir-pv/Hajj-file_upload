@@ -31,6 +31,7 @@ const UpcomingEvents = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [showList, setShowList] = useState(true);
   const [currentFolderId, setCurrentFolderId] = useState<number>(1);
+  const [order, setOrder] = useState<number>(0);
 
   useEffect(() => {
     signInAnonymousUser().catch(() => {
@@ -143,7 +144,8 @@ const UpcomingEvents = () => {
         description: editingEvent.description,
         url: editingEvent.url,
         timestamp: editingEvent.timestamp,
-        folderId: editingEvent.folderId
+        folderId: editingEvent.folderId,
+        order: order,
       };
 
       // Update in Firestore using folderId as document ID
@@ -273,6 +275,22 @@ const UpcomingEvents = () => {
                   placeholder="e.g., June 1, 2024"
                   required
                 />
+              </div>
+
+                          {/* display order */}
+
+                 <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Display Order
+                </label>
+                <input
+                  type="number"
+                  value={order}
+                  onChange={(e) => setOrder(parseInt(e.target.value) || 0)}
+                  min="0"
+                  className="w-full p-2 border rounded text-gray-700 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+                <p className="text-xs text-gray-500 mt-1">Lower numbers will appear first in the list</p>
               </div>
 
               <div>

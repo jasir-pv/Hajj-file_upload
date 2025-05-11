@@ -254,6 +254,7 @@ const HistoricPlaces = () => {
                 />
               </div>
               
+              
               {/* Description */}
               <div className="mb-6">
                 <div className="flex justify-between items-center mb-2">
