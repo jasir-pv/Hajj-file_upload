@@ -229,7 +229,7 @@ const TravelAdvisories = () => {
                   <div className='mt-3'>
                     <h3 className="font-medium text-lg text-gray-800">{advisory.title}</h3>
                     <p className="text-sm text-gray-500 mb-2">{advisory.date}</p>
-                    <p className="text-sm text-gray-600 mb-1">Folder ID: {advisory.folderId}</p>
+                    <p className="text-sm text-gray-600 mb-1">Order: {advisory.order}</p>
                     <p className="text-gray-700 whitespace-pre-line line-clamp-3">{advisory.description}</p>
                   </div>
                 </div>

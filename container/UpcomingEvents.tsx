@@ -14,6 +14,7 @@ type Event = {
   description: string;
   url: string;
   timestamp: string;
+  order:number
   folderId: number; // Added folderId
 };
 
@@ -62,6 +63,7 @@ const UpcomingEvents = () => {
           description: data.description,
           url: data.url,
           timestamp: data.timestamp,
+          order:data.order,
           folderId: data.folderId || 1 // Default to 1 if not set
         });
       });
@@ -230,7 +232,7 @@ const UpcomingEvents = () => {
                   <div className='mt-3'>
                     <h3 className="font-medium text-lg text-gray-800">{event.title}</h3>
                     <p className="text-sm text-gray-500 mb-2">{event.date}</p>
-                    <p className="text-xs text-gray-400 mb-1">Folder ID: {event.folderId}</p>
+                    <p className="text-xs text-gray-400 mb-1">Order: {event.order}</p>
                     {event.description && (
                       <p className="text-gray-700 mb-2 line-clamp-3">{event.description}</p>
                     )}
