@@ -17,6 +17,7 @@ type UpdateItem = {
   description: string;
   imageUrl: string;
   timestamp: string;
+  order: number; 
   folderId: number; // Added folderId
 };
 
@@ -76,12 +77,13 @@ const LiveUpdates = () => {
           description: data.description,
           imageUrl: data.imageUrl,
           timestamp: data.timestamp,
+          order: data.order || 0 ,
           folderId: data.folderId || 1 // Default to 1 if not set
         });
       });
       
       // Sort updates by folderId (ascending)
-      allUpdates.sort((a, b) => a.folderId - b.folderId);
+      allUpdates.sort((a, b) =>  a.order - b.order);
       setUpdates(allUpdates);
     } catch (err) {
       console.error("Error fetching updates:", err);
@@ -183,7 +185,8 @@ const LiveUpdates = () => {
         description: newUpdate.description,
         imageUrl: imageUrl || null,
         timestamp: new Date().toISOString(),
-        folderId: folderId
+        folderId: folderId,
+        order:order,
       };
 
       // Add to Firestore with folderId as document ID
@@ -201,6 +204,7 @@ const LiveUpdates = () => {
       });
       setImageFile(null);
       setPreviewUrl(null);
+      setOrder(0);
       setError("");
     } catch (error) {
       console.error("Error adding update:", error);
@@ -213,6 +217,7 @@ const LiveUpdates = () => {
     setIsEditing(true);
     setEditingPreviewUrl(update.imageUrl || null);
     setShowList(false);
+    setOrder(update.order || 0)
   };
 
   const handleUpdateEdit = async () => {
@@ -227,7 +232,7 @@ const LiveUpdates = () => {
       let imageUrl = editingUpdate.imageUrl || null;
       
       // Upload new image if selected
-      if (editingImageFile) {
+      if (editingImageFile){
         // Delete old image if exists
         if (editingUpdate.imageUrl) {
           try {
@@ -278,6 +283,7 @@ const LiveUpdates = () => {
     setEditingImageFile(null);
     setEditingPreviewUrl(null);
     setError("");
+    setOrder(0); 
   };
 
   const handleDeleteUpdate = async (id: string, imageUrl?: string, folderId?: number) => {

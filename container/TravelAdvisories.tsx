@@ -14,6 +14,7 @@ type AdvisoryItem = {
   description: string;
   timestamp: string;
   folderId: number;
+  order:number;
 };
 
 const TravelAdvisories = () => {
@@ -60,6 +61,7 @@ const TravelAdvisories = () => {
           date: data.date,
           description: data.description,
           timestamp: data.timestamp,
+          order:data.order,
           folderId: data.folderId || (allAdvisories.length + 1) // Fallback to length if not set
         });
       });
@@ -100,7 +102,7 @@ const TravelAdvisories = () => {
         description: newAdvisory.description,
         timestamp: new Date().toISOString(),
         folderId: nextFolderId,
-        order:order
+        order:order,
       };
   
       // Create document with folderId as the document ID
@@ -115,8 +117,10 @@ const TravelAdvisories = () => {
       setNewAdvisory({
         title: "",
         date: "",
-        description: ""
+        description: "",
+        
       });
+      setOrder(0)
       setError("");
     } catch (error) {
       console.error("Error adding advisory:", error);
@@ -128,6 +132,7 @@ const TravelAdvisories = () => {
     setEditingAdvisory(advisory);
     setIsEditing(true);
     setShowList(false);
+    setOrder(advisory.order)
   };
 
   const handleUpdateAdvisory = async () => {
@@ -145,7 +150,8 @@ const TravelAdvisories = () => {
         date: editingAdvisory.date,
         description: editingAdvisory.description,
         timestamp: editingAdvisory.timestamp, // Keep original timestamp
-        folderId: editingAdvisory.folderId // Keep original folderId
+        folderId: editingAdvisory.folderId,
+        order:order
       };
 
       // Update in Firestore
