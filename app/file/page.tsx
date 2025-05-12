@@ -353,7 +353,6 @@ const FileEditContent = () => {
       setPreviewUrls([]);
       setNewParagraphs([]);
       setProgress(0);
-      setOrder(0);
       setError("");
       
       // Reload the page to show updated content
