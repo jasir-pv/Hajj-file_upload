@@ -31,6 +31,7 @@ interface ContentData {
   files: string[];
   images: string[];
   audios: string[];
+  order: number;
 }
 
 const FileEditContent = () => {
@@ -57,6 +58,9 @@ const FileEditContent = () => {
     others: string[];
   }>({ images: [], audios: [], others: [] });
   const [newParagraphs, setNewParagraphs] = useState<ParagraphItem[]>([]);
+
+
+  const [order, setOrder] = useState<number>(0);
 
   useEffect(() => {
     if (!storage || !firestore) {
@@ -349,6 +353,7 @@ const FileEditContent = () => {
       setPreviewUrls([]);
       setNewParagraphs([]);
       setProgress(0);
+      setOrder(0);
       setError("");
       
       // Reload the page to show updated content
@@ -574,6 +579,20 @@ const FileEditContent = () => {
             ))}
           </div>
         )}
+
+    <div className="space-y-2">
+          <label className="block text-sm font-medium text-gray-700">
+            Display Order
+          </label>
+          <input
+            type="number"
+            value={content.order || 0}
+            onChange={(e) => setContent({ ...content, order: parseInt(e.target.value) || 0 })}
+            min="0"
+            className="w-full p-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+          <p className="text-xs text-gray-500">Lower numbers will appear first in the list</p>
+        </div>
 
         {/* New Paragraphs */}
         <div className="space-y-4">

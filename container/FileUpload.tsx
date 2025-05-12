@@ -28,6 +28,7 @@ interface ContentData {
   description: string[];
   paragraphs: ParagraphItem[];
   content_image?: string;
+  order:number;
   category: "hajj" | "umrah" | "madina";
 }
 
@@ -58,6 +59,8 @@ const FileUpload = () => {
   const [editMode, setEditMode] = useState(false);
   const [viewMode, setViewMode] = useState<"form" | "list">("form");
 
+  const [order, setOrder] = useState<number>(0);
+
   // Add a new state for tracking current upload
   const [isUploading, setIsUploading] = useState(false);
 
@@ -86,6 +89,7 @@ const FileUpload = () => {
     setPreviewUrls([]);
     removeContentImage();
     setProgress(0);
+    setOrder(0);
     setEditMode(false);
   };
 
@@ -429,6 +433,7 @@ const FileUpload = () => {
             description: cleanDescription,
             paragraphs: cleanParagraphs,
             category: activeTab,
+            order: order,
           };
 
           if (contentImageUrl) {
@@ -711,6 +716,22 @@ const FileUpload = () => {
                   )}
                 </div>
               ))}
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Display Order
+              </label>
+              <input
+                type="number"
+                value={order}
+                onChange={(e) => setOrder(parseInt(e.target.value) || 0)}
+                min="0"
+                className="w-full p-2 border rounded text-gray-700 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Lower numbers will appear first in the list
+              </p>
             </div>
 
             {/* Paragraphs */}
