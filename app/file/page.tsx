@@ -60,7 +60,7 @@ const FileEditContent = () => {
   const [newParagraphs, setNewParagraphs] = useState<ParagraphItem[]>([]);
 
 
-  const [order, setOrder] = useState<number>(0);
+
 
   useEffect(() => {
     if (!storage || !firestore) {
