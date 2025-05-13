@@ -297,6 +297,22 @@ const HistoricPlaces = () => {
                   </div>
                 ))}
               </div>
+
+
+               {/* Display Order Input */}
+             <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Display Order
+                </label>
+                <input
+                  type="number"
+                  value={order}
+                  onChange={(e) => setOrder(parseInt(e.target.value) || 0)}
+                  min="0"
+                  className="w-full p-2 border rounded text-gray-700 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+                <p className="text-xs text-gray-500 mt-1">Lower numbers will appear first in the list</p>
+              </div>
               
               {/* Paragraphs */}
               <div>
@@ -557,20 +573,7 @@ const HistoricPlaces = () => {
                 </div>
               )}
 
-              {/* Display Order Input */}
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Display Order
-                </label>
-                <input
-                  type="number"
-                  value={order}
-                  onChange={(e) => setOrder(parseInt(e.target.value) || 0)}
-                  min="0"
-                  className="w-full p-2 border rounded text-gray-700 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-                <p className="text-xs text-gray-500 mt-1">Lower numbers will appear first in the list</p>
-              </div>
+
 
               {/* Upload Button */}
               <button
